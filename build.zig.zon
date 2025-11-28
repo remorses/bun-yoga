@@ -1,14 +1,10 @@
 .{
-    .name = .yoga_napi,
+    .name = .bun_yoga,
     .version = "0.1.0",
     .fingerprint = 0xd85a4945fc276d9,
     .minimum_zig_version = "0.15.1",
 
     .dependencies = .{
-        .napigen = .{
-            .url = "git+https://github.com/cztomsik/napigen#main",
-            .hash = "122038c9528848729f37fd87d2eefeb2ed7c8d11d24aafd451334d29445f7e87eba7",
-        },
         .@"yoga-zig" = .{
             .url = "git+https://github.com/cmsommer/yoga-zig#main",
             .hash = "yoga_zig-0.3.0-pNOHLNBnAAB-wlqoeWddmJdjA9f05cyIfw-2JqjBlY2f",
