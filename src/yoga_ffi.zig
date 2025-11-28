@@ -963,7 +963,7 @@ pub export fn ygCreateSize(width: f32, height: f32) u64 {
 
 /// Helper to pack YGValue into u64 for FFI (unit in lower 32, value bits in upper 32)
 fn packValue(val: YGValue) u64 {
-    const unit_bits: u32 = @intCast(@intFromEnum(val.unit));
+    const unit_bits: u32 = @intCast(val.unit);
     const value_bits: u32 = @bitCast(val.value);
     return @as(u64, value_bits) << 32 | @as(u64, unit_bits);
 }

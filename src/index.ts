@@ -315,6 +315,19 @@ function parseValue(value: ValueInput): {
   return { unit: Unit.Point, asNumber: value as number };
 }
 
+// Helper to unpack Value from u64 (lower 32 bits = unit, upper 32 bits = value as f32 bits)
+function unpackValue(packed: number | bigint): Value {
+  const p = BigInt(packed);
+  const unit = Number(p & 0xffffffffn) as Unit;
+  const valueBits = Number((p >> 32n) & 0xffffffffn);
+  // Convert u32 bits back to f32
+  const buffer = new ArrayBuffer(4);
+  const view = new DataView(buffer);
+  view.setUint32(0, valueBits, true);
+  const value = view.getFloat32(0, true);
+  return { unit, value };
+}
+
 // Load the library
 const lib = dlopen(getLibPath(), {
   // Config functions
@@ -478,6 +491,19 @@ const lib = dlopen(getLibPath(), {
   ygNodeSetBaselineFuncTrampoline: { args: ["ptr", "ptr"], returns: "void" },
   ygNodeUnsetBaselineFuncTrampoline: { args: ["ptr"], returns: "void" },
   ygNodeFreeCallbacks: { args: ["ptr"], returns: "void" },
+
+  // Value getters (packed: lower 32 bits = unit, upper 32 bits = value)
+  ygNodeStyleGetWidthPacked: { args: ["ptr"], returns: "u64" },
+  ygNodeStyleGetHeightPacked: { args: ["ptr"], returns: "u64" },
+  ygNodeStyleGetMinWidthPacked: { args: ["ptr"], returns: "u64" },
+  ygNodeStyleGetMinHeightPacked: { args: ["ptr"], returns: "u64" },
+  ygNodeStyleGetMaxWidthPacked: { args: ["ptr"], returns: "u64" },
+  ygNodeStyleGetMaxHeightPacked: { args: ["ptr"], returns: "u64" },
+  ygNodeStyleGetMarginPacked: { args: ["ptr", "i32"], returns: "u64" },
+  ygNodeStyleGetPaddingPacked: { args: ["ptr", "i32"], returns: "u64" },
+  ygNodeStyleGetPositionPacked: { args: ["ptr", "i32"], returns: "u64" },
+  ygNodeStyleGetGapPacked: { args: ["ptr", "i32"], returns: "u64" },
+  ygNodeStyleGetFlexBasisPacked: { args: ["ptr"], returns: "u64" },
 });
 
 const yg = lib.symbols;
@@ -990,12 +1016,59 @@ export class Node {
     }
   }
 
-  setAspectRatio(aspectRatio: number): void {
-    yg.ygNodeStyleSetAspectRatio(this.ptr, aspectRatio);
+  setAspectRatio(aspectRatio: number | undefined): void {
+    if (aspectRatio !== undefined) {
+      yg.ygNodeStyleSetAspectRatio(this.ptr, aspectRatio);
+    }
   }
 
   getAspectRatio(): number {
     return yg.ygNodeStyleGetAspectRatio(this.ptr);
+  }
+
+  // Value getters (return {unit, value} like yoga-layout)
+  getWidth(): Value {
+    return unpackValue(yg.ygNodeStyleGetWidthPacked(this.ptr));
+  }
+
+  getHeight(): Value {
+    return unpackValue(yg.ygNodeStyleGetHeightPacked(this.ptr));
+  }
+
+  getMinWidth(): Value {
+    return unpackValue(yg.ygNodeStyleGetMinWidthPacked(this.ptr));
+  }
+
+  getMinHeight(): Value {
+    return unpackValue(yg.ygNodeStyleGetMinHeightPacked(this.ptr));
+  }
+
+  getMaxWidth(): Value {
+    return unpackValue(yg.ygNodeStyleGetMaxWidthPacked(this.ptr));
+  }
+
+  getMaxHeight(): Value {
+    return unpackValue(yg.ygNodeStyleGetMaxHeightPacked(this.ptr));
+  }
+
+  getMargin(edge: Edge): Value {
+    return unpackValue(yg.ygNodeStyleGetMarginPacked(this.ptr, edge));
+  }
+
+  getPadding(edge: Edge): Value {
+    return unpackValue(yg.ygNodeStyleGetPaddingPacked(this.ptr, edge));
+  }
+
+  getPosition(edge: Edge): Value {
+    return unpackValue(yg.ygNodeStyleGetPositionPacked(this.ptr, edge));
+  }
+
+  getGap(gutter: Gutter): Value {
+    return unpackValue(yg.ygNodeStyleGetGapPacked(this.ptr, gutter));
+  }
+
+  getFlexBasis(): Value {
+    return unpackValue(yg.ygNodeStyleGetFlexBasisPacked(this.ptr));
   }
 
   // Callback functions

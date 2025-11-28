@@ -486,6 +486,83 @@ describe("New API methods", () => {
   });
 });
 
+describe("Value getters", () => {
+  test("getWidth returns Value with unit and value", () => {
+    const node = Node.create();
+
+    node.setWidth(100);
+    const width = node.getWidth();
+    expect(width.unit).toBe(Yoga.Unit.Point);
+    expect(width.value).toBe(100);
+
+    node.setWidth("50%");
+    const widthPercent = node.getWidth();
+    expect(widthPercent.unit).toBe(Yoga.Unit.Percent);
+    expect(widthPercent.value).toBe(50);
+
+    node.setWidth("auto");
+    const widthAuto = node.getWidth();
+    expect(widthAuto.unit).toBe(Yoga.Unit.Auto);
+
+    node.free();
+  });
+
+  test("getMargin returns Value with unit and value", () => {
+    const node = Node.create();
+
+    node.setMargin(Edge.Left, 20);
+    const margin = node.getMargin(Edge.Left);
+    expect(margin.unit).toBe(Yoga.Unit.Point);
+    expect(margin.value).toBe(20);
+
+    node.setMargin(Edge.Top, "10%");
+    const marginPercent = node.getMargin(Edge.Top);
+    expect(marginPercent.unit).toBe(Yoga.Unit.Percent);
+    expect(marginPercent.value).toBe(10);
+
+    node.free();
+  });
+
+  test("getFlexBasis returns Value", () => {
+    const node = Node.create();
+
+    node.setFlexBasis(50);
+    const basis = node.getFlexBasis();
+    expect(basis.unit).toBe(Yoga.Unit.Point);
+    expect(basis.value).toBe(50);
+
+    node.setFlexBasis("auto");
+    const basisAuto = node.getFlexBasis();
+    expect(basisAuto.unit).toBe(Yoga.Unit.Auto);
+
+    node.free();
+  });
+});
+
+describe("DirtiedFunction signature", () => {
+  test("dirtiedFunc receives node as parameter", () => {
+    const root = Node.create();
+    root.setWidth(100);
+    root.setHeight(100);
+
+    let receivedNode: Node | undefined = undefined;
+
+    root.setMeasureFunc(() => ({ width: 100, height: 100 }));
+    root.calculateLayout(100, 100, Direction.LTR);
+
+    root.setDirtiedFunc((node) => {
+      receivedNode = node;
+    });
+
+    root.markDirty();
+
+    expect(receivedNode).toBeDefined();
+    expect(receivedNode === root).toBe(true);
+
+    root.free();
+  });
+});
+
 describe("Config", () => {
   test("errata settings", () => {
     const config = Config.create();

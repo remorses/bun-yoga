@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.1
+
+### Breaking Changes
+- `DirtiedFunction` signature changed to match yoga-layout: `(node: Node) => void` instead of `() => void`
+
+### New Features
+- **Value getter methods**: Added all Value getters that return `{unit, value}` like yoga-layout:
+  - `getWidth()`, `getHeight()`, `getMinWidth()`, `getMinHeight()`, `getMaxWidth()`, `getMaxHeight()`
+  - `getMargin(edge)`, `getPadding(edge)`, `getPosition(edge)`, `getGap(gutter)`
+  - `getFlexBasis()`
+
+### Fixes
+- **Enum getter return types**: All enum getters now return proper enum types instead of `number`:
+  - `getDirection()` returns `Direction` (was `number`)
+  - `getFlexDirection()` returns `FlexDirection` (was `number`)
+  - `getJustifyContent()` returns `Justify` (was `number`)
+  - `getAlignContent()`, `getAlignItems()`, `getAlignSelf()` return `Align` (was `number`)
+  - `getPositionType()` returns `PositionType` (was `number`)
+  - `getFlexWrap()` returns `Wrap` (was `number`)
+  - `getOverflow()` returns `Overflow` (was `number`)
+  - `getDisplay()` returns `Display` (was `number`)
+- **Setter parameter types**: All enum setters now accept proper enum types instead of `number`
+
+### Internal
+- Added Zig packed value helper functions for FFI struct returns
+- Added comprehensive tests for Value getters and DirtiedFunction
+
 ## 0.2.0
 
 ### Breaking Changes
