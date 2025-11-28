@@ -280,8 +280,6 @@ pub export fn ygNodeLayoutGetPadding(node: YGNodeConstRef, edge: YGEdge) f32 {
     return c.YGNodeLayoutGetPadding(node, edge);
 }
 
-
-
 //=============================================================================
 // STYLE - LAYOUT PROPERTIES
 //=============================================================================
@@ -778,12 +776,77 @@ pub export fn ygNodeGetAlwaysFormsContainingBlock(node: YGNodeConstRef) bool {
 }
 
 //=============================================================================
-// CALLBACK HELPER FUNCTIONS
+// CALLBACK HELPER FUNCTIONS - MEASURE FUNCTION WORKAROUND
+//=============================================================================
+// 
+// The ARM64 calling convention returns struct { float, float } in s0 and s1 registers.
+// However, Bun FFI callbacks can only return via x0 (integer) or d0 (single float register).
+// Since d0 != s0+s1 on ARM64, we can't properly return YGSize from a JSCallback.
+//
+// Workaround: Use a trampoline that stores results via thread-local storage.
 //=============================================================================
 
-/// Helper to create a YGSize struct for measure function results
-pub export fn ygCreateSize(width: f32, height: f32) c.YGSize {
-    return c.YGSize{ .width = width, .height = height };
+/// Thread-local storage for measure function results
+var tls_measure_width: f32 = 0;
+var tls_measure_height: f32 = 0;
+
+/// Store measure result - call this from JS callback before returning
+pub export fn ygStoreMeasureResult(width: f32, height: f32) void {
+    tls_measure_width = width;
+    tls_measure_height = height;
+}
+
+/// JS callback type for measure function trampoline
+/// Note: YGMeasureMode is already c_uint from the C binding
+const JsMeasureTrampoline = *const fn (?*anyopaque, f32, c.YGMeasureMode, f32, c.YGMeasureMode) callconv(.c) void;
+
+/// Internal measure function that reads from TLS
+fn internalMeasureFunc(
+    node: YGNodeConstRef,
+    width: f32,
+    widthMode: YGMeasureMode,
+    height: f32,
+    heightMode: YGMeasureMode,
+) callconv(.c) YGSize {
+    // Get the JS callback pointer from node context
+    const context = c.YGNodeGetContext(node);
+    if (context) |ctx| {
+        // Cast to our trampoline type
+        const trampoline: JsMeasureTrampoline = @ptrCast(@alignCast(ctx));
+        // Call the trampoline - it will store results via ygStoreMeasureResult
+        trampoline(@ptrCast(@constCast(node)), width, widthMode, height, heightMode);
+    }
+    // Return the stored values
+    return YGSize{ .width = tls_measure_width, .height = tls_measure_height };
+}
+
+/// Set measure function using the trampoline approach
+/// The trampoline_ptr should be a JSCallback that:
+/// 1. Computes width and height
+/// 2. Calls ygStoreMeasureResult(width, height)
+pub export fn ygNodeSetMeasureFuncTrampoline(node: YGNodeRef, trampoline_ptr: ?*const anyopaque) void {
+    if (trampoline_ptr) |ptr| {
+        // Store the JS callback pointer in node context
+        c.YGNodeSetContext(node, @constCast(ptr));
+        // Set our internal measure function
+        c.YGNodeSetMeasureFunc(node, &internalMeasureFunc);
+    } else {
+        c.YGNodeSetContext(node, null);
+        c.YGNodeSetMeasureFunc(node, null);
+    }
+}
+
+/// Unset the trampoline-based measure function
+pub export fn ygNodeUnsetMeasureFuncTrampoline(node: YGNodeRef) void {
+    c.YGNodeSetContext(node, null);
+    c.YGNodeSetMeasureFunc(node, null);
+}
+
+/// Legacy helper - kept for compatibility but prefer trampoline approach
+pub export fn ygCreateSize(width: f32, height: f32) u64 {
+    const w_bits: u32 = @bitCast(width);
+    const h_bits: u32 = @bitCast(height);
+    return @as(u64, h_bits) << 32 | @as(u64, w_bits);
 }
 
 //=============================================================================

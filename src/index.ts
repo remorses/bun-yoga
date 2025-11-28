@@ -1,4 +1,4 @@
-import { dlopen, type Pointer, suffix } from "bun:ffi";
+import { dlopen, type Pointer, suffix, JSCallback, FFIType } from "bun:ffi";
 import { join } from "path";
 import { existsSync } from "fs";
 import { arch, platform } from "os";
@@ -364,9 +364,45 @@ const lib = dlopen(getLibPath(), {
   // Style properties - Aspect Ratio
   ygNodeStyleSetAspectRatio: { args: ["ptr", "f32"], returns: "void" },
   ygNodeStyleGetAspectRatio: { args: ["ptr"], returns: "f32" },
+
+  // Node context
+  ygNodeSetContext: { args: ["ptr", "ptr"], returns: "void" },
+  ygNodeGetContext: { args: ["ptr"], returns: "ptr" },
+
+  // Callback functions
+  ygNodeSetMeasureFunc: { args: ["ptr", "ptr"], returns: "void" },
+  ygNodeUnsetMeasureFunc: { args: ["ptr"], returns: "void" },
+  ygNodeHasMeasureFunc: { args: ["ptr"], returns: "bool" },
+  ygNodeSetBaselineFunc: { args: ["ptr", "ptr"], returns: "void" },
+  ygNodeUnsetBaselineFunc: { args: ["ptr"], returns: "void" },
+  ygNodeHasBaselineFunc: { args: ["ptr"], returns: "bool" },
+  ygNodeSetDirtiedFunc: { args: ["ptr", "ptr"], returns: "void" },
+  ygNodeUnsetDirtiedFunc: { args: ["ptr"], returns: "void" },
+  ygNodeGetDirtiedFunc: { args: ["ptr"], returns: "ptr" },
+
+  // Callback helper functions
+  ygCreateSize: { args: ["f32", "f32"], returns: "u64" },
+  ygStoreMeasureResult: { args: ["f32", "f32"], returns: "void" },
+  ygNodeSetMeasureFuncTrampoline: { args: ["ptr", "ptr"], returns: "void" },
+  ygNodeUnsetMeasureFuncTrampoline: { args: ["ptr"], returns: "void" },
 });
 
 const yg = lib.symbols;
+
+// ============================================================================
+// Callback function types
+// ============================================================================
+
+export type MeasureFunction = (
+  width: number,
+  widthMode: number,
+  height: number,
+  heightMode: number
+) => { width: number; height: number };
+
+export type BaselineFunction = (width: number, height: number) => number;
+
+export type DirtiedFunction = () => void;
 
 // ============================================================================
 // Node class - yoga-layout compatible API
@@ -374,6 +410,9 @@ const yg = lib.symbols;
 
 export class Node {
   private ptr: Pointer;
+  private measureCallback: JSCallback | null = null;
+  private baselineCallback: JSCallback | null = null;
+  private dirtiedCallback: JSCallback | null = null;
 
   private constructor(ptr: Pointer) {
     this.ptr = ptr;
@@ -400,6 +439,10 @@ export class Node {
   }
 
   free(): void {
+    // Clean up callbacks before freeing the node
+    this.unsetMeasureFunc();
+    this.unsetBaselineFunc();
+    this.unsetDirtiedFunc();
     yg.ygNodeFree(this.ptr);
   }
 
@@ -759,6 +802,122 @@ export class Node {
   getAspectRatio(): number {
     return yg.ygNodeStyleGetAspectRatio(this.ptr);
   }
+
+  // Callback functions
+  setMeasureFunc(measureFunc: MeasureFunction | null): void {
+    this.unsetMeasureFunc(); // Clean up existing callback
+
+    if (measureFunc) {
+      // Use trampoline approach to work around ARM64 ABI limitations
+      // The trampoline doesn't return the result directly - instead it stores
+      // the result via ygStoreMeasureResult, and our Zig wrapper reads it
+      this.measureCallback = new JSCallback(
+        (
+          nodePtr: Pointer,
+          width: number,
+          widthMode: number,
+          height: number,
+          heightMode: number
+        ) => {
+          const result = measureFunc(width, widthMode, height, heightMode);
+          // Store the result for the Zig wrapper to read
+          yg.ygStoreMeasureResult(result.width, result.height);
+        },
+        {
+          args: [
+            FFIType.ptr,
+            FFIType.f32,
+            FFIType.u32,
+            FFIType.f32,
+            FFIType.u32,
+          ],
+          returns: FFIType.void,
+        }
+      );
+
+      if (this.measureCallback.ptr) {
+        yg.ygNodeSetMeasureFuncTrampoline(this.ptr, this.measureCallback.ptr);
+      }
+    }
+  }
+
+  unsetMeasureFunc(): void {
+    if (this.measureCallback) {
+      this.measureCallback.close();
+      this.measureCallback = null;
+    }
+    yg.ygNodeUnsetMeasureFuncTrampoline(this.ptr);
+  }
+
+  hasMeasureFunc(): boolean {
+    return yg.ygNodeHasMeasureFunc(this.ptr);
+  }
+
+  setBaselineFunc(baselineFunc: BaselineFunction | null): void {
+    this.unsetBaselineFunc(); // Clean up existing callback
+
+    if (baselineFunc) {
+      // Create a JSCallback that matches Yoga's expected baseline function signature
+      this.baselineCallback = new JSCallback(
+        (nodePtr: Pointer, width: number, height: number) => {
+          return baselineFunc(width, height);
+        },
+        {
+          args: [FFIType.ptr, FFIType.f32, FFIType.f32],
+          returns: FFIType.f32,
+        }
+      );
+
+      if (this.baselineCallback.ptr) {
+        yg.ygNodeSetBaselineFunc(this.ptr, this.baselineCallback.ptr);
+      }
+    }
+  }
+
+  unsetBaselineFunc(): void {
+    if (this.baselineCallback) {
+      this.baselineCallback.close();
+      this.baselineCallback = null;
+    }
+    yg.ygNodeUnsetBaselineFunc(this.ptr);
+  }
+
+  hasBaselineFunc(): boolean {
+    return yg.ygNodeHasBaselineFunc(this.ptr);
+  }
+
+  setDirtiedFunc(dirtiedFunc: DirtiedFunction | null): void {
+    this.unsetDirtiedFunc(); // Clean up existing callback
+
+    if (dirtiedFunc) {
+      // Create a JSCallback that matches Yoga's expected dirtied function signature
+      this.dirtiedCallback = new JSCallback(
+        (nodePtr: Pointer) => {
+          dirtiedFunc();
+        },
+        {
+          args: [FFIType.ptr],
+          returns: FFIType.void,
+        }
+      );
+
+      if (this.dirtiedCallback.ptr) {
+        yg.ygNodeSetDirtiedFunc(this.ptr, this.dirtiedCallback.ptr);
+      }
+    }
+  }
+
+  unsetDirtiedFunc(): void {
+    if (this.dirtiedCallback) {
+      this.dirtiedCallback.close();
+      this.dirtiedCallback = null;
+    }
+    yg.ygNodeUnsetDirtiedFunc(this.ptr);
+  }
+
+  hasDirtiedFunc(): boolean {
+    return yg.ygNodeGetDirtiedFunc(this.ptr) !== null;
+  }
 }
 
 // ============================================================================
@@ -807,6 +966,7 @@ export class Config {
 export default {
   Node,
   Config,
+  // Enums
   Align,
   BoxSizing,
   Dimension,
