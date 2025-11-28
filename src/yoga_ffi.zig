@@ -958,6 +958,72 @@ pub export fn ygCreateSize(width: f32, height: f32) u64 {
 }
 
 //=============================================================================
+// VALUE GETTERS (packed for FFI - returns unit in lower 32 bits, value in upper 32)
+//=============================================================================
+
+/// Helper to pack YGValue into u64 for FFI (unit in lower 32, value bits in upper 32)
+fn packValue(val: YGValue) u64 {
+    const unit_bits: u32 = @intCast(@intFromEnum(val.unit));
+    const value_bits: u32 = @bitCast(val.value);
+    return @as(u64, value_bits) << 32 | @as(u64, unit_bits);
+}
+
+/// Gets width as packed value (unit | value)
+pub export fn ygNodeStyleGetWidthPacked(node: YGNodeConstRef) u64 {
+    return packValue(c.YGNodeStyleGetWidth(node));
+}
+
+/// Gets height as packed value
+pub export fn ygNodeStyleGetHeightPacked(node: YGNodeConstRef) u64 {
+    return packValue(c.YGNodeStyleGetHeight(node));
+}
+
+/// Gets min width as packed value
+pub export fn ygNodeStyleGetMinWidthPacked(node: YGNodeConstRef) u64 {
+    return packValue(c.YGNodeStyleGetMinWidth(node));
+}
+
+/// Gets min height as packed value
+pub export fn ygNodeStyleGetMinHeightPacked(node: YGNodeConstRef) u64 {
+    return packValue(c.YGNodeStyleGetMinHeight(node));
+}
+
+/// Gets max width as packed value
+pub export fn ygNodeStyleGetMaxWidthPacked(node: YGNodeConstRef) u64 {
+    return packValue(c.YGNodeStyleGetMaxWidth(node));
+}
+
+/// Gets max height as packed value
+pub export fn ygNodeStyleGetMaxHeightPacked(node: YGNodeConstRef) u64 {
+    return packValue(c.YGNodeStyleGetMaxHeight(node));
+}
+
+/// Gets margin as packed value
+pub export fn ygNodeStyleGetMarginPacked(node: YGNodeConstRef, edge: YGEdge) u64 {
+    return packValue(c.YGNodeStyleGetMargin(node, edge));
+}
+
+/// Gets padding as packed value
+pub export fn ygNodeStyleGetPaddingPacked(node: YGNodeConstRef, edge: YGEdge) u64 {
+    return packValue(c.YGNodeStyleGetPadding(node, edge));
+}
+
+/// Gets position as packed value
+pub export fn ygNodeStyleGetPositionPacked(node: YGNodeConstRef, edge: YGEdge) u64 {
+    return packValue(c.YGNodeStyleGetPosition(node, edge));
+}
+
+/// Gets gap as packed value
+pub export fn ygNodeStyleGetGapPacked(node: YGNodeConstRef, gutter: YGGutter) u64 {
+    return packValue(c.YGNodeStyleGetGap(node, gutter));
+}
+
+/// Gets flex basis as packed value
+pub export fn ygNodeStyleGetFlexBasisPacked(node: YGNodeConstRef) u64 {
+    return packValue(c.YGNodeStyleGetFlexBasis(node));
+}
+
+//=============================================================================
 // UTILITY FUNCTIONS
 //=============================================================================
 

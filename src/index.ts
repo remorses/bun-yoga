@@ -495,7 +495,7 @@ export type MeasureFunction = (
 
 export type BaselineFunction = (width: number, height: number) => number;
 
-export type DirtiedFunction = () => void;
+export type DirtiedFunction = (node: Node) => void;
 
 // ============================================================================
 // Node class - yoga-layout compatible API
@@ -672,84 +672,84 @@ export class Node {
   }
 
   // Style setters
-  setDirection(direction: number): void {
+  setDirection(direction: Direction): void {
     yg.ygNodeStyleSetDirection(this.ptr, direction);
   }
 
-  getDirection(): number {
-    return yg.ygNodeStyleGetDirection(this.ptr);
+  getDirection(): Direction {
+    return yg.ygNodeStyleGetDirection(this.ptr) as Direction;
   }
 
-  setFlexDirection(flexDirection: number): void {
+  setFlexDirection(flexDirection: FlexDirection): void {
     yg.ygNodeStyleSetFlexDirection(this.ptr, flexDirection);
   }
 
-  getFlexDirection(): number {
-    return yg.ygNodeStyleGetFlexDirection(this.ptr);
+  getFlexDirection(): FlexDirection {
+    return yg.ygNodeStyleGetFlexDirection(this.ptr) as FlexDirection;
   }
 
-  setJustifyContent(justifyContent: number): void {
+  setJustifyContent(justifyContent: Justify): void {
     yg.ygNodeStyleSetJustifyContent(this.ptr, justifyContent);
   }
 
-  getJustifyContent(): number {
-    return yg.ygNodeStyleGetJustifyContent(this.ptr);
+  getJustifyContent(): Justify {
+    return yg.ygNodeStyleGetJustifyContent(this.ptr) as Justify;
   }
 
-  setAlignContent(alignContent: number): void {
+  setAlignContent(alignContent: Align): void {
     yg.ygNodeStyleSetAlignContent(this.ptr, alignContent);
   }
 
-  getAlignContent(): number {
-    return yg.ygNodeStyleGetAlignContent(this.ptr);
+  getAlignContent(): Align {
+    return yg.ygNodeStyleGetAlignContent(this.ptr) as Align;
   }
 
-  setAlignItems(alignItems: number): void {
+  setAlignItems(alignItems: Align): void {
     yg.ygNodeStyleSetAlignItems(this.ptr, alignItems);
   }
 
-  getAlignItems(): number {
-    return yg.ygNodeStyleGetAlignItems(this.ptr);
+  getAlignItems(): Align {
+    return yg.ygNodeStyleGetAlignItems(this.ptr) as Align;
   }
 
-  setAlignSelf(alignSelf: number): void {
+  setAlignSelf(alignSelf: Align): void {
     yg.ygNodeStyleSetAlignSelf(this.ptr, alignSelf);
   }
 
-  getAlignSelf(): number {
-    return yg.ygNodeStyleGetAlignSelf(this.ptr);
+  getAlignSelf(): Align {
+    return yg.ygNodeStyleGetAlignSelf(this.ptr) as Align;
   }
 
-  setPositionType(positionType: number): void {
+  setPositionType(positionType: PositionType): void {
     yg.ygNodeStyleSetPositionType(this.ptr, positionType);
   }
 
-  getPositionType(): number {
-    return yg.ygNodeStyleGetPositionType(this.ptr);
+  getPositionType(): PositionType {
+    return yg.ygNodeStyleGetPositionType(this.ptr) as PositionType;
   }
 
-  setFlexWrap(flexWrap: number): void {
+  setFlexWrap(flexWrap: Wrap): void {
     yg.ygNodeStyleSetFlexWrap(this.ptr, flexWrap);
   }
 
-  getFlexWrap(): number {
-    return yg.ygNodeStyleGetFlexWrap(this.ptr);
+  getFlexWrap(): Wrap {
+    return yg.ygNodeStyleGetFlexWrap(this.ptr) as Wrap;
   }
 
-  setOverflow(overflow: number): void {
+  setOverflow(overflow: Overflow): void {
     yg.ygNodeStyleSetOverflow(this.ptr, overflow);
   }
 
-  getOverflow(): number {
-    return yg.ygNodeStyleGetOverflow(this.ptr);
+  getOverflow(): Overflow {
+    return yg.ygNodeStyleGetOverflow(this.ptr) as Overflow;
   }
 
-  setDisplay(display: number): void {
+  setDisplay(display: Display): void {
     yg.ygNodeStyleSetDisplay(this.ptr, display);
   }
 
-  getDisplay(): number {
-    return yg.ygNodeStyleGetDisplay(this.ptr);
+  getDisplay(): Display {
+    return yg.ygNodeStyleGetDisplay(this.ptr) as Display;
   }
 
   setBoxSizing(boxSizing: BoxSizing): void {
@@ -1087,10 +1087,12 @@ export class Node {
     this.unsetDirtiedFunc(); // Clean up existing callback
 
     if (dirtiedFunc) {
+      // Capture this node instance for the callback
+      const node = this;
       // Create a JSCallback that matches Yoga's expected dirtied function signature
       this.dirtiedCallback = new JSCallback(
         (nodePtr: Pointer) => {
-          dirtiedFunc();
+          dirtiedFunc(node);
         },
         {
           args: [FFIType.ptr],
