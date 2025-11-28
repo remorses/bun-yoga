@@ -11,6 +11,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // ========================================================================
+    // NAPI Library (for Node.js/Bun require())
+    // ========================================================================
+
     // Create the main library module
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -40,6 +44,37 @@ pub fn build(b: *std.Build) void {
     // Copy the result to a *.node file so we can require() it
     const copy_node_step = b.addInstallLibFile(lib.getEmittedBin(), "yoga_napi.node");
     b.getInstallStep().dependOn(&copy_node_step.step);
+
+    // ========================================================================
+    // FFI Library (for Bun FFI)
+    // ========================================================================
+
+    // Create the FFI library module
+    const ffi_mod = b.createModule(.{
+        .root_source_file = b.path("src/yoga_ffi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Add yoga-zig as an import
+    ffi_mod.addImport("yoga-zig", yoga_zig_dep.module("yoga-zig"));
+
+    // Create the FFI dynamic library
+    const ffi_lib = b.addLibrary(.{
+        .name = "yoga_ffi",
+        .linkage = .dynamic,
+        .root_module = ffi_mod,
+    });
+
+    // Link yoga-zig artifact
+    ffi_lib.linkLibrary(yoga_zig_dep.artifact("yoga-zig"));
+
+    // Build the FFI lib
+    b.installArtifact(ffi_lib);
+
+    // ========================================================================
+    // Tests
+    // ========================================================================
 
     // Tests - test the wrapper file which doesn't need napigen
     const test_mod = b.createModule(.{
