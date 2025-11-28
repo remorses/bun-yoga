@@ -26,6 +26,7 @@
 ### Internal
 - Added Zig packed value helper functions for FFI struct returns
 - Added comprehensive tests for Value getters and DirtiedFunction
+- Source files now included in npm package with `bun` export condition
 
 ## 0.2.0
 
