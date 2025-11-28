@@ -72,3 +72,8 @@ config.free();
 ## Progress Tracking
 
 See `progress.md` for detailed progress and decisions.
+
+
+## reading github files
+
+do `curl gitchamber.com` to read list, read, search github files
