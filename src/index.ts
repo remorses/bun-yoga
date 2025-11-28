@@ -514,9 +514,9 @@ const yg = lib.symbols;
 
 export type MeasureFunction = (
   width: number,
-  widthMode: number,
+  widthMode: MeasureMode,
   height: number,
-  heightMode: number
+  heightMode: MeasureMode
 ) => { width: number; height: number };
 
 export type BaselineFunction = (width: number, height: number) => number;
@@ -1087,7 +1087,7 @@ export class Node {
           height: number,
           heightMode: number
         ) => {
-          const result = measureFunc(width, widthMode, height, heightMode);
+          const result = measureFunc(width, widthMode as MeasureMode, height, heightMode as MeasureMode);
           // Store the result for the Zig wrapper to read
           yg.ygStoreMeasureResult(result.width, result.height);
         },
