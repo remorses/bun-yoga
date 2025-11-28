@@ -3,18 +3,6 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { arch, platform } from "os";
 
-// Embed native libraries for bun compile (type: "file" embeds them in the binary)
-// @ts-ignore - import attribute for embedding binary files
-import embeddedDarwinArm64 from "../dist/darwin-arm64/libyoga.dylib" with { type: "file" };
-// @ts-ignore - import attribute for embedding binary files
-import embeddedDarwinX64 from "../dist/darwin-x64/libyoga.dylib" with { type: "file" };
-// @ts-ignore - import attribute for embedding binary files
-import embeddedLinuxX64 from "../dist/linux-x64/libyoga.so" with { type: "file" };
-// @ts-ignore - import attribute for embedding binary files
-import embeddedLinuxArm64 from "../dist/linux-arm64/libyoga.so" with { type: "file" };
-// @ts-ignore - import attribute for embedding binary files
-import embeddedWindowsX64 from "../dist/windows-x64/yoga.dll" with { type: "file" };
-
 // Platform detection
 function getPlatformTarget(): string {
   const p = platform();
@@ -30,16 +18,35 @@ function getPlatformTarget(): string {
   throw new Error(`Unsupported platform: ${p}-${a}`);
 }
 
+// Lazy load embedded libraries only for the current platform (for bun compile)
+// Using dynamic imports to avoid parse-time errors when dist files don't exist
 function getEmbeddedLib(): string | undefined {
   const target = getPlatformTarget();
-  const libs: Record<string, string> = {
-    "darwin-arm64": embeddedDarwinArm64,
-    "darwin-x64": embeddedDarwinX64,
-    "linux-x64": embeddedLinuxX64,
-    "linux-arm64": embeddedLinuxArm64,
-    "windows-x64": embeddedWindowsX64,
-  };
-  return libs[target];
+  try {
+    // Use require() which is evaluated at runtime, not parse time
+    // The type: "file" attribute embeds the binary in bun compile builds
+    switch (target) {
+      case "darwin-arm64":
+        // @ts-ignore
+        return require("../dist/darwin-arm64/libyoga.dylib");
+      case "darwin-x64":
+        // @ts-ignore
+        return require("../dist/darwin-x64/libyoga.dylib");
+      case "linux-x64":
+        // @ts-ignore
+        return require("../dist/linux-x64/libyoga.so");
+      case "linux-arm64":
+        // @ts-ignore
+        return require("../dist/linux-arm64/libyoga.so");
+      case "windows-x64":
+        // @ts-ignore
+        return require("../dist/windows-x64/yoga.dll");
+      default:
+        return undefined;
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 function getLibPath(): string {
