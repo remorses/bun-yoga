@@ -8,6 +8,12 @@
 - Changed callback context allocator from Zig's GeneralPurposeAllocator to C allocator for glibc compatibility
 - Made thread-local storage variables actually threadlocal to prevent race conditions
 - Added context cleanup to `ygNodeFree`, `ygNodeFreeRecursive`, and `ygNodeReset`
+- Fixed `freeRecursive()` and `reset()` not cleaning up JSCallback objects, causing memory leaks
+
+### Tests
+- Added memory management tests for callback cleanup in `freeRecursive()` and `reset()`
+- Added stress tests for rapid free/create cycles with measure functions
+- Added tests for interleaved node lifecycle with callbacks
 
 ## 0.2.4
 

@@ -566,11 +566,33 @@ export class Node {
   }
 
   freeRecursive(): void {
+    // Clean up this node's callbacks before freeing
+    // Note: Child nodes' JSCallback objects are not tracked here - if you have
+    // references to child Node objects, their callbacks become invalid after this call
+    this.cleanupCallbacks();
     yg.ygNodeFreeRecursive(this.ptr);
   }
 
   reset(): void {
+    // Clean up callbacks before reset since reset clears all state
+    this.cleanupCallbacks();
     yg.ygNodeReset(this.ptr);
+  }
+
+  /** Internal helper to close JSCallback objects without calling native unset functions */
+  private cleanupCallbacks(): void {
+    if (this.measureCallback) {
+      this.measureCallback.close();
+      this.measureCallback = null;
+    }
+    if (this.baselineCallback) {
+      this.baselineCallback.close();
+      this.baselineCallback = null;
+    }
+    if (this.dirtiedCallback) {
+      this.dirtiedCallback.close();
+      this.dirtiedCallback = null;
+    }
   }
 
   clone(): Node {

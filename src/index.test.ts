@@ -610,3 +610,183 @@ describe("Type exports", () => {
     expect(errata).toBe(0);
   });
 });
+
+describe("Memory management", () => {
+  test("freeRecursive cleans up callbacks without errors", () => {
+    const root = Node.create();
+    root.setWidth(200);
+    root.setHeight(200);
+    root.setFlexDirection(FlexDirection.Column);
+
+    // Create a child with measure function (nodes with measure funcs can't have children)
+    const child = Node.create();
+    child.setAlignSelf(Align.FlexStart);
+
+    let measureCalled = false;
+    child.setMeasureFunc(() => {
+      measureCalled = true;
+      return { width: 100, height: 100 };
+    });
+
+    root.insertChild(child, 0);
+    root.calculateLayout();
+    expect(measureCalled).toBe(true);
+
+    // freeRecursive should clean up callbacks properly
+    // This should not throw or cause memory corruption
+    root.freeRecursive();
+  });
+
+  test("reset cleans up callbacks and allows new ones", () => {
+    const node = Node.create();
+
+    // Set measure function (don't set width/height so measure func is called)
+    let firstCallbackCalled = false;
+    node.setMeasureFunc(() => {
+      firstCallbackCalled = true;
+      return { width: 50, height: 50 };
+    });
+
+    node.calculateLayout();
+    expect(firstCallbackCalled).toBe(true);
+    expect(node.hasMeasureFunc()).toBe(true);
+
+    // Reset should clean up the callback
+    node.reset();
+
+    // After reset, node should not have measure function
+    expect(node.hasMeasureFunc()).toBe(false);
+
+    // Should be able to set a new measure function
+    let secondCallbackCalled = false;
+    node.setMeasureFunc(() => {
+      secondCallbackCalled = true;
+      return { width: 75, height: 75 };
+    });
+
+    expect(node.hasMeasureFunc()).toBe(true);
+    node.calculateLayout();
+    expect(secondCallbackCalled).toBe(true);
+
+    node.free();
+  });
+
+  test("rapid free/create cycles with measure functions", () => {
+    // This test verifies that rapid free/create cycles don't cause
+    // memory corruption (the original bug on Linux)
+    const config = Config.create();
+
+    for (let i = 0; i < 100; i++) {
+      const node = Node.create(config);
+      // Don't set width/height so measure function is called
+
+      const expectedSize = 10 + i;
+      node.setMeasureFunc(() => ({
+        width: expectedSize,
+        height: expectedSize,
+      }));
+
+      node.calculateLayout();
+
+      const width = node.getComputedWidth();
+      expect(width).toBe(expectedSize);
+      expect(Number.isNaN(width)).toBe(false);
+
+      node.free();
+    }
+
+    config.free();
+  });
+
+  test("reset followed by free works correctly", () => {
+    const node = Node.create();
+
+    node.setMeasureFunc(() => ({ width: 50, height: 50 }));
+    node.setBaselineFunc(() => 25);
+    node.setDirtiedFunc(() => {});
+
+    node.calculateLayout();
+
+    // Reset clears callbacks
+    node.reset();
+
+    // Free should work without double-free
+    node.free();
+  });
+
+  test("multiple reset calls are safe", () => {
+    const node = Node.create();
+
+    node.setMeasureFunc(() => ({ width: 50, height: 50 }));
+    node.calculateLayout();
+
+    // Multiple resets should be safe
+    node.reset();
+    node.reset();
+    node.reset();
+
+    node.free();
+  });
+
+  test("freeRecursive with nested children with callbacks", () => {
+    const root = Node.create();
+    root.setWidth(200);
+    root.setHeight(200);
+    root.setFlexDirection(FlexDirection.Column);
+
+    // Create children with measure functions
+    // Note: We can't add children to nodes with measure functions,
+    // so we set up the hierarchy first, then add measure func to leaf nodes
+    const child1 = Node.create();
+    child1.setAlignSelf(Align.FlexStart);
+    child1.setMeasureFunc(() => ({ width: 50, height: 50 }));
+
+    const child2 = Node.create();
+    child2.setAlignSelf(Align.FlexStart);
+    child2.setMeasureFunc(() => ({ width: 60, height: 60 }));
+
+    root.insertChild(child1, 0);
+    root.insertChild(child2, 1);
+
+    root.calculateLayout();
+
+    expect(child1.getComputedWidth()).toBe(50);
+    expect(child2.getComputedWidth()).toBe(60);
+
+    // freeRecursive should clean up all nodes and their callbacks
+    // The native context is cleaned up by Zig's freeContextRecursive
+    root.freeRecursive();
+  });
+
+  test("interleaved node lifecycle with callbacks", () => {
+    const config = Config.create();
+    const nodes: Node[] = [];
+
+    // Create several nodes with callbacks
+    for (let i = 0; i < 20; i++) {
+      const node = Node.create(config);
+      node.setMeasureFunc(() => ({ width: 10 + i, height: 10 + i }));
+      nodes.push(node);
+    }
+
+    // Free some, keep others
+    for (let i = 0; i < nodes.length; i += 2) {
+      nodes[i].free();
+    }
+
+    // Calculate remaining nodes
+    for (let i = 1; i < nodes.length; i += 2) {
+      nodes[i].calculateLayout();
+      const width = nodes[i].getComputedWidth();
+      expect(width).toBe(10 + i);
+      expect(Number.isNaN(width)).toBe(false);
+    }
+
+    // Free remaining
+    for (let i = 1; i < nodes.length; i += 2) {
+      nodes[i].free();
+    }
+
+    config.free();
+  });
+});
