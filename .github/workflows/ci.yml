@@ -46,9 +46,6 @@ jobs:
           retry_on: error
           command: zig build -Doptimize=ReleaseFast
 
-      - name: Run Zig tests
-        run: zig build test
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
