@@ -18,16 +18,12 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x64
-            lib: libyoga.so
           - os: macos-latest
             target: darwin-arm64
-            lib: libyoga.dylib
           - os: macos-13
             target: darwin-x64
-            lib: libyoga.dylib
           - os: windows-latest
             target: windows-x64
-            lib: yoga.dll
       fail-fast: true
 
     runs-on: ${{ matrix.os }}
@@ -53,15 +49,6 @@ jobs:
       - name: Run Zig tests
         run: zig build test
 
-      - name: Prepare library path (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          if (Test-Path "zig-out/bin/${{ matrix.lib }}") {
-            New-Item -ItemType Directory -Force -Path "zig-out/lib"
-            Copy-Item "zig-out/bin/${{ matrix.lib }}" "zig-out/lib/${{ matrix.lib }}"
-          }
-        shell: pwsh
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
@@ -77,7 +64,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lib-${{ matrix.target }}
-          path: zig-out/lib/${{ matrix.lib }}
+          path: zig-out/lib/yoga.node
 
   # Cross-compile for Linux ARM64
   build-linux-arm64:
@@ -105,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lib-linux-arm64
-          path: zig-out/lib/libyoga.so
+          path: zig-out/lib/yoga.node
 
   publish:
     needs: [build, build-linux-arm64]
