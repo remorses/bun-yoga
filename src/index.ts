@@ -6,28 +6,19 @@ function loadNativeModule() {
     return require("../zig-out/lib/yoga.node");
   } catch {}
 
-  // Load platform-specific dist path (hardcoded for static analysis)
-  // Each require is wrapped in try/catch to handle Bun's static resolution
+  // Load platform-specific dist path
+  // Using template literal to prevent Bun from static analysis (causes crash on Windows)
   const p = platform();
   const a = arch();
+  let target: string;
 
-  if (p === "darwin" && a === "arm64") {
-    try { return require("../dist/darwin-arm64/yoga.node"); } catch {}
-  }
-  if (p === "darwin") {
-    try { return require("../dist/darwin-x64/yoga.node"); } catch {}
-  }
-  if (p === "linux" && a === "arm64") {
-    try { return require("../dist/linux-arm64/yoga.node"); } catch {}
-  }
-  if (p === "linux") {
-    try { return require("../dist/linux-x64/yoga.node"); } catch {}
-  }
-  if (p === "win32") {
-    try { return require("../dist/windows-x64/yoga.node"); } catch {}
-  }
+  if (p === "darwin") target = a === "arm64" ? "darwin-arm64" : "darwin-x64";
+  else if (p === "linux") target = a === "arm64" ? "linux-arm64" : "linux-x64";
+  else if (p === "win32") target = "windows-x64";
+  else throw new Error(`Unsupported platform: ${p}-${a}`);
 
-  throw new Error(`Unsupported platform: ${p}-${a}`);
+  // Template literal prevents static analysis but still loads the right binary
+  return require(`../dist/${target}/yoga.node`);
 }
 
 // Yoga enum definitions

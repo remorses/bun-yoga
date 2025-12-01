@@ -2,7 +2,7 @@
 
 ## 0.2.8
 
-- Hardcoded require paths for native modules to make them statically analyzable by bundlers (removed dynamic template literal)
+- Removed `getPlatform` helper function, inlined platform detection logic
 
 ## 0.2.7
 
