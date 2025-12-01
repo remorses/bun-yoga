@@ -1,42 +1,22 @@
-import { join } from "path";
-import { existsSync } from "fs";
 import { arch, platform } from "os";
 
-// Platform detection
-function getPlatformTarget(): string {
+function getPlatform() {
   const p = platform();
   const a = arch();
-
-  if (p === "darwin") {
-    return a === "arm64" ? "darwin-arm64" : "darwin-x64";
-  } else if (p === "linux") {
-    return a === "arm64" ? "linux-arm64" : "linux-x64";
-  } else if (p === "win32") {
-    return "windows-x64";
-  }
+  if (p === "darwin") return a === "arm64" ? "darwin-arm64" : "darwin-x64";
+  if (p === "linux") return a === "arm64" ? "linux-arm64" : "linux-x64";
+  if (p === "win32") return "windows-x64";
   throw new Error(`Unsupported platform: ${p}-${a}`);
 }
 
-function getNodePath(): string {
-  const target = getPlatformTarget();
+function loadNativeModule() {
+  // Try development path first
+  try {
+    return require(`../zig-out/lib/yoga.node`);
+  } catch {}
 
-  // Check local development path (zig-out) first for development
-  const devPath = join(__dirname, "..", "zig-out", "lib", "yoga.node");
-  if (existsSync(devPath)) {
-    return devPath;
-  }
-
-  // Check npm package dist paths
-  const distPath = join(__dirname, "..", "dist", target, "yoga.node");
-  if (existsSync(distPath)) {
-    return distPath;
-  }
-
-  throw new Error(
-    `Could not find native library yoga.node. ` +
-      `Looked in:\n  - ${devPath}\n  - ${distPath}\n` +
-      `Make sure to run 'zig build' or install the package with binaries.`
-  );
+  // Try platform-specific dist path
+  return require(`../dist/${getPlatform()}/yoga.node`);
 }
 
 // Yoga enum definitions
@@ -266,7 +246,7 @@ function parseValue(value: ValueInput): {
 }
 
 // Load the native module
-const yg = require(getNodePath());
+const yg = loadNativeModule();
 
 // Native pointer type (opaque object from napigen)
 type NativePtr = object;
@@ -941,42 +921,62 @@ export class Node {
     return yg.nodeStyleGetFlexBasis(this.ptr);
   }
 
-  // Callback functions - not implemented for NAPI version
-  // These would require additional napigen features for JS callbacks
-  setMeasureFunc(_measureFunc: MeasureFunction | null): void {
-    throw new Error("Measure functions are not yet supported in NAPI version");
+  // Callback functions
+  setMeasureFunc(measureFunc: MeasureFunction | null): void {
+    this.assertNotFreed();
+    if (measureFunc) {
+      yg.nodeSetMeasureFunc(this.ptr, measureFunc);
+    } else {
+      yg.nodeUnsetMeasureFunc(this.ptr);
+    }
   }
 
   unsetMeasureFunc(): void {
-    // No-op for NAPI version
+    if (this._freed) return;
+    yg.nodeUnsetMeasureFunc(this.ptr);
   }
 
   hasMeasureFunc(): boolean {
-    return false;
+    this.assertNotFreed();
+    return yg.nodeHasMeasureFunc(this.ptr);
   }
 
-  setBaselineFunc(_baselineFunc: BaselineFunction | null): void {
-    throw new Error("Baseline functions are not yet supported in NAPI version");
+  setBaselineFunc(baselineFunc: BaselineFunction | null): void {
+    this.assertNotFreed();
+    if (baselineFunc) {
+      yg.nodeSetBaselineFunc(this.ptr, baselineFunc);
+    } else {
+      yg.nodeUnsetBaselineFunc(this.ptr);
+    }
   }
 
   unsetBaselineFunc(): void {
-    // No-op for NAPI version
+    if (this._freed) return;
+    yg.nodeUnsetBaselineFunc(this.ptr);
   }
 
   hasBaselineFunc(): boolean {
-    return false;
+    this.assertNotFreed();
+    return yg.nodeHasBaselineFunc(this.ptr);
   }
 
-  setDirtiedFunc(_dirtiedFunc: DirtiedFunction | null): void {
-    throw new Error("Dirtied functions are not yet supported in NAPI version");
+  setDirtiedFunc(dirtiedFunc: DirtiedFunction | null): void {
+    this.assertNotFreed();
+    if (dirtiedFunc) {
+      yg.nodeSetDirtiedFunc(this.ptr, dirtiedFunc);
+    } else {
+      yg.nodeUnsetDirtiedFunc(this.ptr);
+    }
   }
 
   unsetDirtiedFunc(): void {
-    // No-op for NAPI version
+    if (this._freed) return;
+    yg.nodeUnsetDirtiedFunc(this.ptr);
   }
 
   hasDirtiedFunc(): boolean {
-    return false;
+    this.assertNotFreed();
+    return yg.nodeHasDirtiedFunc(this.ptr);
   }
 }
 

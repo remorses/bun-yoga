@@ -75,15 +75,34 @@ fn nodeClone(node: *anyopaque) *anyopaque {
 }
 
 fn nodeFree(node: *anyopaque) void {
-    c.YGNodeFree(@ptrCast(@alignCast(node)));
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    freeContext(yg_node);
+    c.YGNodeFree(yg_node);
 }
 
 fn nodeFreeRecursive(node: *anyopaque) void {
-    c.YGNodeFreeRecursive(@ptrCast(@alignCast(node)));
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    // Free contexts for all children recursively
+    freeContextRecursive(yg_node);
+    c.YGNodeFreeRecursive(yg_node);
+}
+
+fn freeContextRecursive(node: c.YGNodeRef) void {
+    const childCount = c.YGNodeGetChildCount(node);
+    var i: usize = 0;
+    while (i < childCount) : (i += 1) {
+        const child = c.YGNodeGetChild(node, i);
+        if (child) |ch| {
+            freeContextRecursive(ch);
+        }
+    }
+    freeContext(node);
 }
 
 fn nodeReset(node: *anyopaque) void {
-    c.YGNodeReset(@ptrCast(@alignCast(node)));
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    freeContext(yg_node);
+    c.YGNodeReset(yg_node);
 }
 
 //=============================================================================
@@ -473,6 +492,303 @@ fn nodeSetAlwaysFormsContainingBlock(node: *anyopaque, alwaysFormsContainingBloc
 }
 
 //=============================================================================
+// CALLBACK SUPPORT
+//=============================================================================
+
+/// Context struct stored on each node that has callbacks
+const CallbackContext = struct {
+    env: napigen.napi_env,
+    measure_func: ?napigen.napi_ref = null,
+    baseline_func: ?napigen.napi_ref = null,
+    dirtied_func: ?napigen.napi_ref = null,
+};
+
+const callback_allocator = std.heap.c_allocator;
+
+/// Get or create callback context for a node
+fn getOrCreateContext(node: c.YGNodeRef, env: napigen.napi_env) *CallbackContext {
+    const existing = c.YGNodeGetContext(node);
+    if (existing) |ptr| {
+        return @ptrCast(@alignCast(ptr));
+    }
+    const ctx = callback_allocator.create(CallbackContext) catch @panic("Failed to allocate callback context");
+    ctx.* = CallbackContext{ .env = env };
+    c.YGNodeSetContext(node, ctx);
+    return ctx;
+}
+
+/// Get callback context for a node (may return null)
+fn getContext(node: c.YGNodeConstRef) ?*CallbackContext {
+    const existing = c.YGNodeGetContext(node);
+    if (existing) |ptr| {
+        return @ptrCast(@alignCast(ptr));
+    }
+    return null;
+}
+
+/// Free callback context and release refs
+fn freeContext(node: c.YGNodeRef) void {
+    const existing = c.YGNodeGetContext(node);
+    if (existing) |ptr| {
+        const ctx: *CallbackContext = @ptrCast(@alignCast(ptr));
+        // Release refs
+        if (ctx.measure_func) |ref| {
+            _ = napigen.napi.napi_delete_reference(ctx.env, ref);
+        }
+        if (ctx.baseline_func) |ref| {
+            _ = napigen.napi.napi_delete_reference(ctx.env, ref);
+        }
+        if (ctx.dirtied_func) |ref| {
+            _ = napigen.napi.napi_delete_reference(ctx.env, ref);
+        }
+        callback_allocator.destroy(ctx);
+        c.YGNodeSetContext(node, null);
+    }
+}
+
+/// Internal measure function called by Yoga
+fn internalMeasureFunc(
+    node: c.YGNodeConstRef,
+    width: f32,
+    widthMode: c_uint,
+    height: f32,
+    heightMode: c_uint,
+) callconv(.c) YGSize {
+    const ctx = getContext(node) orelse return YGSize{ .width = 0, .height = 0 };
+    const measure_ref = ctx.measure_func orelse return YGSize{ .width = 0, .height = 0 };
+
+    // Get the JS function from ref
+    var js_func: napigen.napi_value = undefined;
+    if (napigen.napi.napi_get_reference_value(ctx.env, measure_ref, &js_func) != napigen.napi.napi_ok) {
+        return YGSize{ .width = 0, .height = 0 };
+    }
+
+    // Get undefined for 'this'
+    var undefined_val: napigen.napi_value = undefined;
+    _ = napigen.napi.napi_get_undefined(ctx.env, &undefined_val);
+
+    // Create arguments
+    var args: [4]napigen.napi_value = undefined;
+    _ = napigen.napi.napi_create_double(ctx.env, width, &args[0]);
+    _ = napigen.napi.napi_create_uint32(ctx.env, widthMode, &args[1]);
+    _ = napigen.napi.napi_create_double(ctx.env, height, &args[2]);
+    _ = napigen.napi.napi_create_uint32(ctx.env, heightMode, &args[3]);
+
+    // Call the JS function
+    var result: napigen.napi_value = undefined;
+    if (napigen.napi.napi_call_function(ctx.env, undefined_val, js_func, 4, &args, &result) != napigen.napi.napi_ok) {
+        return YGSize{ .width = 0, .height = 0 };
+    }
+
+    // Extract width and height from result object
+    var width_val: napigen.napi_value = undefined;
+    var height_val: napigen.napi_value = undefined;
+    _ = napigen.napi.napi_get_named_property(ctx.env, result, "width", &width_val);
+    _ = napigen.napi.napi_get_named_property(ctx.env, result, "height", &height_val);
+
+    var result_width: f64 = 0;
+    var result_height: f64 = 0;
+    _ = napigen.napi.napi_get_value_double(ctx.env, width_val, &result_width);
+    _ = napigen.napi.napi_get_value_double(ctx.env, height_val, &result_height);
+
+    return YGSize{ .width = @floatCast(result_width), .height = @floatCast(result_height) };
+}
+
+/// Internal baseline function called by Yoga
+fn internalBaselineFunc(
+    node: c.YGNodeConstRef,
+    width: f32,
+    height: f32,
+) callconv(.c) f32 {
+    const ctx = getContext(node) orelse return 0;
+    const baseline_ref = ctx.baseline_func orelse return 0;
+
+    // Get the JS function from ref
+    var js_func: napigen.napi_value = undefined;
+    if (napigen.napi.napi_get_reference_value(ctx.env, baseline_ref, &js_func) != napigen.napi.napi_ok) {
+        return 0;
+    }
+
+    // Get undefined for 'this'
+    var undefined_val: napigen.napi_value = undefined;
+    _ = napigen.napi.napi_get_undefined(ctx.env, &undefined_val);
+
+    // Create arguments
+    var args: [2]napigen.napi_value = undefined;
+    _ = napigen.napi.napi_create_double(ctx.env, width, &args[0]);
+    _ = napigen.napi.napi_create_double(ctx.env, height, &args[1]);
+
+    // Call the JS function
+    var result: napigen.napi_value = undefined;
+    if (napigen.napi.napi_call_function(ctx.env, undefined_val, js_func, 2, &args, &result) != napigen.napi.napi_ok) {
+        return 0;
+    }
+
+    var result_val: f64 = 0;
+    _ = napigen.napi.napi_get_value_double(ctx.env, result, &result_val);
+
+    return @floatCast(result_val);
+}
+
+/// Internal dirtied function called by Yoga
+fn internalDirtiedFunc(node: c.YGNodeConstRef) callconv(.c) void {
+    const ctx = getContext(node) orelse return;
+    const dirtied_ref = ctx.dirtied_func orelse return;
+
+    // Get the JS function from ref
+    var js_func: napigen.napi_value = undefined;
+    if (napigen.napi.napi_get_reference_value(ctx.env, dirtied_ref, &js_func) != napigen.napi.napi_ok) {
+        return;
+    }
+
+    // Get undefined for 'this'
+    var undefined_val: napigen.napi_value = undefined;
+    _ = napigen.napi.napi_get_undefined(ctx.env, &undefined_val);
+
+    // Call with no arguments
+    var result: napigen.napi_value = undefined;
+    _ = napigen.napi.napi_call_function(ctx.env, undefined_val, js_func, 0, null, &result);
+}
+
+/// Set measure function from JS
+fn nodeSetMeasureFunc(js: *napigen.JsContext, node: *anyopaque, func: napigen.napi_value) !void {
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    const ctx = getOrCreateContext(yg_node, js.env);
+
+    // Delete old ref if exists
+    if (ctx.measure_func) |old_ref| {
+        _ = napigen.napi.napi_delete_reference(ctx.env, old_ref);
+        ctx.measure_func = null;
+    }
+
+    // Check if func is null/undefined
+    var value_type: napigen.napi_valuetype = undefined;
+    _ = napigen.napi.napi_typeof(js.env, func, &value_type);
+    if (value_type == napigen.napi.napi_null or value_type == napigen.napi.napi_undefined) {
+        c.YGNodeSetMeasureFunc(yg_node, null);
+        return;
+    }
+
+    // Create a reference to the function
+    var ref: napigen.napi_ref = undefined;
+    try napigen.check(napigen.napi.napi_create_reference(js.env, func, 1, &ref));
+    ctx.measure_func = ref;
+
+    // Set the internal measure func
+    c.YGNodeSetMeasureFunc(yg_node, &internalMeasureFunc);
+}
+
+/// Unset measure function
+fn nodeUnsetMeasureFunc(js: *napigen.JsContext, node: *anyopaque) void {
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    c.YGNodeSetMeasureFunc(yg_node, null);
+
+    if (getContext(yg_node)) |ctx| {
+        if (ctx.measure_func) |ref| {
+            _ = napigen.napi.napi_delete_reference(js.env, ref);
+            ctx.measure_func = null;
+        }
+    }
+}
+
+/// Check if node has measure func
+fn nodeHasMeasureFunc(node: *anyopaque) bool {
+    return c.YGNodeHasMeasureFunc(@ptrCast(@alignCast(node)));
+}
+
+/// Set baseline function from JS
+fn nodeSetBaselineFunc(js: *napigen.JsContext, node: *anyopaque, func: napigen.napi_value) !void {
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    const ctx = getOrCreateContext(yg_node, js.env);
+
+    // Delete old ref if exists
+    if (ctx.baseline_func) |old_ref| {
+        _ = napigen.napi.napi_delete_reference(ctx.env, old_ref);
+        ctx.baseline_func = null;
+    }
+
+    // Check if func is null/undefined
+    var value_type: napigen.napi_valuetype = undefined;
+    _ = napigen.napi.napi_typeof(js.env, func, &value_type);
+    if (value_type == napigen.napi.napi_null or value_type == napigen.napi.napi_undefined) {
+        c.YGNodeSetBaselineFunc(yg_node, null);
+        return;
+    }
+
+    // Create a reference to the function
+    var ref: napigen.napi_ref = undefined;
+    try napigen.check(napigen.napi.napi_create_reference(js.env, func, 1, &ref));
+    ctx.baseline_func = ref;
+
+    // Set the internal baseline func
+    c.YGNodeSetBaselineFunc(yg_node, &internalBaselineFunc);
+}
+
+/// Unset baseline function
+fn nodeUnsetBaselineFunc(js: *napigen.JsContext, node: *anyopaque) void {
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    c.YGNodeSetBaselineFunc(yg_node, null);
+
+    if (getContext(yg_node)) |ctx| {
+        if (ctx.baseline_func) |ref| {
+            _ = napigen.napi.napi_delete_reference(js.env, ref);
+            ctx.baseline_func = null;
+        }
+    }
+}
+
+/// Check if node has baseline func
+fn nodeHasBaselineFunc(node: *anyopaque) bool {
+    return c.YGNodeHasBaselineFunc(@ptrCast(@alignCast(node)));
+}
+
+/// Set dirtied function from JS
+fn nodeSetDirtiedFunc(js: *napigen.JsContext, node: *anyopaque, func: napigen.napi_value) !void {
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    const ctx = getOrCreateContext(yg_node, js.env);
+
+    // Delete old ref if exists
+    if (ctx.dirtied_func) |old_ref| {
+        _ = napigen.napi.napi_delete_reference(ctx.env, old_ref);
+        ctx.dirtied_func = null;
+    }
+
+    // Check if func is null/undefined
+    var value_type: napigen.napi_valuetype = undefined;
+    _ = napigen.napi.napi_typeof(js.env, func, &value_type);
+    if (value_type == napigen.napi.napi_null or value_type == napigen.napi.napi_undefined) {
+        c.YGNodeSetDirtiedFunc(yg_node, null);
+        return;
+    }
+
+    // Create a reference to the function
+    var ref: napigen.napi_ref = undefined;
+    try napigen.check(napigen.napi.napi_create_reference(js.env, func, 1, &ref));
+    ctx.dirtied_func = ref;
+
+    // Set the internal dirtied func
+    c.YGNodeSetDirtiedFunc(yg_node, &internalDirtiedFunc);
+}
+
+/// Unset dirtied function
+fn nodeUnsetDirtiedFunc(js: *napigen.JsContext, node: *anyopaque) void {
+    const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
+    c.YGNodeSetDirtiedFunc(yg_node, null);
+
+    if (getContext(yg_node)) |ctx| {
+        if (ctx.dirtied_func) |ref| {
+            _ = napigen.napi.napi_delete_reference(js.env, ref);
+            ctx.dirtied_func = null;
+        }
+    }
+}
+
+/// Check if node has dirtied func
+fn nodeHasDirtiedFunc(node: *anyopaque) bool {
+    return c.YGNodeGetDirtiedFunc(@ptrCast(@alignCast(node))) != null;
+}
+
+//=============================================================================
 // VALUE GETTERS (return struct {unit, value})
 //=============================================================================
 
@@ -680,6 +996,17 @@ fn initModule(js: *napigen.JsContext, exports: napigen.napi_value) !napigen.napi
     try js.setNamedProperty(exports, "nodeStyleGetPosition", try js.createFunction(nodeStyleGetPosition));
     try js.setNamedProperty(exports, "nodeStyleGetGap", try js.createFunction(nodeStyleGetGap));
     try js.setNamedProperty(exports, "nodeStyleGetFlexBasis", try js.createFunction(nodeStyleGetFlexBasis));
+
+    // Callback functions
+    try js.setNamedProperty(exports, "nodeSetMeasureFunc", try js.createFunction(nodeSetMeasureFunc));
+    try js.setNamedProperty(exports, "nodeUnsetMeasureFunc", try js.createFunction(nodeUnsetMeasureFunc));
+    try js.setNamedProperty(exports, "nodeHasMeasureFunc", try js.createFunction(nodeHasMeasureFunc));
+    try js.setNamedProperty(exports, "nodeSetBaselineFunc", try js.createFunction(nodeSetBaselineFunc));
+    try js.setNamedProperty(exports, "nodeUnsetBaselineFunc", try js.createFunction(nodeUnsetBaselineFunc));
+    try js.setNamedProperty(exports, "nodeHasBaselineFunc", try js.createFunction(nodeHasBaselineFunc));
+    try js.setNamedProperty(exports, "nodeSetDirtiedFunc", try js.createFunction(nodeSetDirtiedFunc));
+    try js.setNamedProperty(exports, "nodeUnsetDirtiedFunc", try js.createFunction(nodeUnsetDirtiedFunc));
+    try js.setNamedProperty(exports, "nodeHasDirtiedFunc", try js.createFunction(nodeHasDirtiedFunc));
 
     return exports;
 }
