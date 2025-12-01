@@ -23,7 +23,7 @@ jobs:
           - os: macos-13
             target: darwin-x64
           - os: windows-latest
-            target: windows-x64
+            target: win32-x64
       fail-fast: true
 
     runs-on: ${{ matrix.os }}
@@ -137,8 +137,8 @@ jobs:
       - name: Download Windows x64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: lib-windows-x64
-          path: dist/windows-x64
+          name: lib-win32-x64
+          path: dist/win32-x64
 
       - name: Install dependencies
         run: bun install
