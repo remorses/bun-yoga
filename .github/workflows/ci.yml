@@ -68,36 +68,66 @@ jobs:
         if: runner.os != 'Windows'
         run: bun test
 
-      - name: Find Windows debugger path
+      - name: Install Windows debugging tools
         if: runner.os == 'Windows'
-        id: find-cdb
         shell: powershell
         run: |
-          # Look for cdb.exe in Windows SDK paths
-          $sdkPaths = @(
-            "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe",
-            "${env:ProgramFiles}\Windows Kits\10\Debuggers\x64\cdb.exe"
-          )
-          foreach ($path in $sdkPaths) {
-            if (Test-Path $path) {
-              Write-Host "Found cdb at: $path"
-              echo "cdb_path=$path" >> $env:GITHUB_OUTPUT
-              exit 0
-            }
-          }
-          Write-Host "cdb.exe not found, will run tests without debugger"
-          echo "cdb_path=" >> $env:GITHUB_OUTPUT
+          # Download and extract procdump for crash dumps
+          $url = "https://download.sysinternals.com/files/Procdump.zip"
+          $zip = "$env:TEMP\procdump.zip"
+          $dest = "$env:TEMP\procdump"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          echo "$dest" >> $env:GITHUB_PATH
 
-      - name: Run Bun tests with debugger (Windows)
-        if: runner.os == 'Windows' && steps.find-cdb.outputs.cdb_path != ''
-        shell: cmd
+      - name: Run Bun tests (Windows with crash capture)
+        if: runner.os == 'Windows'
+        shell: powershell
         run: |
-          @echo Running tests with cdb to capture stack trace on crash...
-          "${{ steps.find-cdb.outputs.cdb_path }}" -lines -o -G -c "~*kP; q" bun.exe test
-
-      - name: Run Bun tests (Windows fallback)
-        if: runner.os == 'Windows' && steps.find-cdb.outputs.cdb_path == ''
-        run: bun test
+          # Run tests and capture crash dump if it crashes
+          $env:BUN_DEBUG_QUIET_LOGS = "1"
+          try {
+            # Use procdump to monitor for crashes and generate dump
+            $procdumpPath = "$env:TEMP\procdump\procdump64.exe"
+            
+            # Accept EULA
+            & $procdumpPath -accepteula 2>$null
+            
+            # Run bun test with procdump monitoring for exceptions
+            # -e 1 = write dump on unhandled exception
+            # -t = terminate after dump
+            # -ma = full dump
+            Write-Host "Running: $procdumpPath -e 1 -t -ma -x . bun.exe test"
+            & $procdumpPath -e 1 -t -ma -x . bun.exe test
+            $exitCode = $LASTEXITCODE
+            
+            # Check for dump files
+            $dumps = Get-ChildItem -Path . -Filter "*.dmp" -ErrorAction SilentlyContinue
+            if ($dumps) {
+              Write-Host "Crash dump(s) generated:"
+              $dumps | ForEach-Object { Write-Host $_.FullName }
+              
+              # Try to get stack trace using cdb if available
+              $cdbPaths = @(
+                "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe",
+                "${env:ProgramFiles}\Windows Kits\10\Debuggers\x64\cdb.exe"
+              )
+              foreach ($cdb in $cdbPaths) {
+                if (Test-Path $cdb) {
+                  Write-Host "Analyzing dump with cdb..."
+                  foreach ($dump in $dumps) {
+                    & $cdb -z $dump.FullName -c "!analyze -v; ~*kP; q"
+                  }
+                  break
+                }
+              }
+            }
+            
+            exit $exitCode
+          } catch {
+            Write-Host "Error: $_"
+            exit 1
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
