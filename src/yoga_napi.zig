@@ -133,16 +133,15 @@ fn nodeGetParent(node: *anyopaque) ?*anyopaque {
 // LAYOUT CALCULATION
 //=============================================================================
 
-// Version with js context - for platforms that support callbacks
-fn nodeCalculateLayoutWithCallbacks(js: *napigen.JsContext, node: *anyopaque, availableWidth: f32, availableHeight: f32, ownerDirection: u32) void {
-    // Set thread-local env for callbacks to use
-    current_env = js.env;
-    defer current_env = null;
+// Use a single function that conditionally handles the js context
+fn nodeCalculateLayout(node: *anyopaque, availableWidth: f32, availableHeight: f32, ownerDirection: u32) void {
     c.YGNodeCalculateLayout(@ptrCast(@alignCast(node)), availableWidth, availableHeight, ownerDirection);
 }
 
-// Version without js context - for Windows where callbacks are disabled
-fn nodeCalculateLayoutSimple(node: *anyopaque, availableWidth: f32, availableHeight: f32, ownerDirection: u32) void {
+// Separate function for callback-enabled platforms that sets env
+fn nodeCalculateLayoutWithEnv(js: *napigen.JsContext, node: *anyopaque, availableWidth: f32, availableHeight: f32, ownerDirection: u32) void {
+    current_env = js.env;
+    defer current_env = null;
     c.YGNodeCalculateLayout(@ptrCast(@alignCast(node)), availableWidth, availableHeight, ownerDirection);
 }
 
@@ -158,16 +157,14 @@ fn nodeIsDirty(node: *anyopaque) bool {
     return c.YGNodeIsDirty(@ptrCast(@alignCast(node)));
 }
 
-// Version with js context - for platforms that support callbacks
-fn nodeMarkDirtyWithCallbacks(js: *napigen.JsContext, node: *anyopaque) void {
-    // Set thread-local env for dirtied callback
-    current_env = js.env;
-    defer current_env = null;
+fn nodeMarkDirty(node: *anyopaque) void {
     c.YGNodeMarkDirty(@ptrCast(@alignCast(node)));
 }
 
-// Version without js context - for Windows
-fn nodeMarkDirtySimple(node: *anyopaque) void {
+// Separate function for callback-enabled platforms
+fn nodeMarkDirtyWithEnv(js: *napigen.JsContext, node: *anyopaque) void {
+    current_env = js.env;
+    defer current_env = null;
     c.YGNodeMarkDirty(@ptrCast(@alignCast(node)));
 }
 
@@ -922,11 +919,11 @@ fn initModule(js: *napigen.JsContext, exports: napigen.napi_value) !napigen.napi
 
     // Layout calculation - use callback-enabled versions on non-Windows
     if (callbacks_enabled) {
-        try js.setNamedProperty(exports, "nodeCalculateLayout", try js.createFunction(nodeCalculateLayoutWithCallbacks));
-        try js.setNamedProperty(exports, "nodeMarkDirty", try js.createFunction(nodeMarkDirtyWithCallbacks));
+        try js.setNamedProperty(exports, "nodeCalculateLayout", try js.createFunction(nodeCalculateLayoutWithEnv));
+        try js.setNamedProperty(exports, "nodeMarkDirty", try js.createFunction(nodeMarkDirtyWithEnv));
     } else {
-        try js.setNamedProperty(exports, "nodeCalculateLayout", try js.createFunction(nodeCalculateLayoutSimple));
-        try js.setNamedProperty(exports, "nodeMarkDirty", try js.createFunction(nodeMarkDirtySimple));
+        try js.setNamedProperty(exports, "nodeCalculateLayout", try js.createFunction(nodeCalculateLayout));
+        try js.setNamedProperty(exports, "nodeMarkDirty", try js.createFunction(nodeMarkDirty));
     }
     try js.setNamedProperty(exports, "nodeGetHasNewLayout", try js.createFunction(nodeGetHasNewLayout));
     try js.setNamedProperty(exports, "nodeSetHasNewLayout", try js.createFunction(nodeSetHasNewLayout));
