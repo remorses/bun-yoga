@@ -38,13 +38,23 @@ jobs:
         with:
           version: 0.15.2
 
-      - name: Build
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 10
           max_attempts: 3
           retry_on: error
           command: zig build -Doptimize=ReleaseFast
+
+      - name: Build (Windows - Debug for stack traces)
+        if: runner.os == 'Windows'
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_on: error
+          command: zig build
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
