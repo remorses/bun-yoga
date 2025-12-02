@@ -27,7 +27,7 @@
   "scripts": {
     "build:zig": "zig build -Doptimize=ReleaseFast",
     "build:zig:dev": "zig build",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.json",
     "prepublishOnly": "bun run build",
     "test": "bun test",
     "bench": "bun run bench.ts"

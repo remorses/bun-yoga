@@ -2,30 +2,32 @@ import { dlopen, suffix, JSCallback, FFIType, type Pointer } from "bun:ffi";
 import { join } from "path";
 import { existsSync } from "fs";
 
-// Lazy load embedded libraries only for the current platform (for bun compile)
-// Using separate require for each platform to enable static analysis
+// Import native libraries with { type: "file" } for bun compile support
+// This tells Bun to embed the file and return a real filesystem path
+// @ts-ignore
+import embeddedLibDarwinArm64 from "../dist/darwin-arm64/libyoga.dylib" with { type: "file" };
+// @ts-ignore
+import embeddedLibDarwinX64 from "../dist/darwin-x64/libyoga.dylib" with { type: "file" };
+// @ts-ignore
+import embeddedLibLinuxX64 from "../dist/linux-x64/libyoga.so" with { type: "file" };
+// @ts-ignore
+import embeddedLibLinuxArm64 from "../dist/linux-arm64/libyoga.so" with { type: "file" };
+// @ts-ignore
+import embeddedLibWindows from "../dist/windows-x64/yoga.dll" with { type: "file" };
+
 function getEmbeddedLib(): string | undefined {
-  try {
-    if (process.platform === "darwin" && process.arch === "arm64") {
-      // @ts-ignore
-      return require.resolve("../dist/darwin-arm64/libyoga.dylib");
-    } else if (process.platform === "darwin" && process.arch === "x64") {
-      // @ts-ignore
-      return require.resolve("../dist/darwin-x64/libyoga.dylib");
-    } else if (process.platform === "linux" && process.arch === "x64") {
-      // @ts-ignore
-      return require.resolve("../dist/linux-x64/libyoga.so");
-    } else if (process.platform === "linux" && process.arch === "arm64") {
-      // @ts-ignore
-      return require.resolve("../dist/linux-arm64/libyoga.so");
-    } else if (process.platform === "win32") {
-      // @ts-ignore
-      return require.resolve("../dist/windows-x64/yoga.dll");
-    }
-    return undefined;
-  } catch {
-    return undefined;
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return embeddedLibDarwinArm64;
+  } else if (process.platform === "darwin" && process.arch === "x64") {
+    return embeddedLibDarwinX64;
+  } else if (process.platform === "linux" && process.arch === "x64") {
+    return embeddedLibLinuxX64;
+  } else if (process.platform === "linux" && process.arch === "arm64") {
+    return embeddedLibLinuxArm64;
+  } else if (process.platform === "win32") {
+    return embeddedLibWindows;
   }
+  return undefined;
 }
 
 function getLibPath(): string {
@@ -45,31 +47,8 @@ function getLibPath(): string {
 
   // Check embedded libraries (for bun compile)
   const embedded = getEmbeddedLib();
-  if (embedded) {
+  if (embedded && existsSync(embedded)) {
     return embedded;
-  }
-
-  // Check npm package dist paths
-  if (process.platform === "darwin" && process.arch === "arm64") {
-    if (existsSync(join(__dirname, "..", "dist", "darwin-arm64", `libyoga.${suffix}`))) {
-      return join(__dirname, "..", "dist", "darwin-arm64", `libyoga.${suffix}`);
-    }
-  } else if (process.platform === "darwin" && process.arch === "x64") {
-    if (existsSync(join(__dirname, "..", "dist", "darwin-x64", `libyoga.${suffix}`))) {
-      return join(__dirname, "..", "dist", "darwin-x64", `libyoga.${suffix}`);
-    }
-  } else if (process.platform === "linux" && process.arch === "x64") {
-    if (existsSync(join(__dirname, "..", "dist", "linux-x64", `libyoga.${suffix}`))) {
-      return join(__dirname, "..", "dist", "linux-x64", `libyoga.${suffix}`);
-    }
-  } else if (process.platform === "linux" && process.arch === "arm64") {
-    if (existsSync(join(__dirname, "..", "dist", "linux-arm64", `libyoga.${suffix}`))) {
-      return join(__dirname, "..", "dist", "linux-arm64", `libyoga.${suffix}`);
-    }
-  } else if (process.platform === "win32") {
-    if (existsSync(join(__dirname, "..", "dist", "windows-x64", `yoga.${suffix}`))) {
-      return join(__dirname, "..", "dist", "windows-x64", `yoga.${suffix}`);
-    }
   }
 
   throw new Error(

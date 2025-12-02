@@ -42,7 +42,7 @@ writeFileSync(join(appDir, "package.json"), JSON.stringify({
 
 // Create test script
 writeFileSync(join(appDir, "test.ts"), `
-import { Node } from "bun-yoga";
+import { Node } from "bun-yoga/src";
 
 const node = Node.create();
 node.setWidth(100);
@@ -78,10 +78,11 @@ if (compile.status !== 0) {
   process.exit(1)
 }
 
-// Delete ALL source files to simulate deployment on another machine
-console.log("\n4. Removing all source files (simulating deployment)...")
+// Delete source files to simulate deployment on another machine
+// Keep appDir so user can experiment with fixes
+console.log("\n4. Removing source files (simulating deployment)...")
 rmSync(pkgCopy, { recursive: true, force: true })
-rmSync(appDir, { recursive: true, force: true })
+rmSync(join(appDir, "node_modules"), { recursive: true, force: true })
 
 // Run the standalone executable (should work without any source files)
 console.log("\n5. Running compiled executable...")
@@ -92,13 +93,12 @@ if (run.status !== 0) {
   console.error("stderr:", run.stderr?.toString())
   console.error("\nThis is the bug - the compiled executable cannot find the native library")
   console.error("when the original source files are not present.")
+  console.log("\nTest directory kept for debugging:", testDir)
   process.exit(1)
 } else {
   console.log(run.stdout?.toString())
   console.log("PASSED: Executable works without source files!")
+  console.log("\nTest directory kept at:", testDir)
 }
 
-// Cleanup
-rmSync(testDir, { recursive: true, force: true })
-
-console.log("\n=== All tests passed ===")
+console.log("\n=== Done ===")
