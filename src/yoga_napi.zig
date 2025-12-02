@@ -74,34 +74,34 @@ fn nodeClone(node: *anyopaque) *anyopaque {
     return @ptrCast(c.YGNodeClone(@ptrCast(@alignCast(node))));
 }
 
-fn nodeFree(js: *napigen.JsContext, node: *anyopaque) void {
+fn nodeFree(node: *anyopaque) void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
-    freeContext(yg_node, js.env);
+    freeContext(yg_node);
     c.YGNodeFree(yg_node);
 }
 
-fn nodeFreeRecursive(js: *napigen.JsContext, node: *anyopaque) void {
+fn nodeFreeRecursive(node: *anyopaque) void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
     // Free contexts for all children recursively
-    freeContextRecursive(yg_node, js.env);
+    freeContextRecursive(yg_node);
     c.YGNodeFreeRecursive(yg_node);
 }
 
-fn freeContextRecursive(node: c.YGNodeRef, env: napigen.napi_env) void {
+fn freeContextRecursive(node: c.YGNodeRef) void {
     const childCount = c.YGNodeGetChildCount(node);
     var i: usize = 0;
     while (i < childCount) : (i += 1) {
         const child = c.YGNodeGetChild(node, i);
         if (child) |ch| {
-            freeContextRecursive(ch, env);
+            freeContextRecursive(ch);
         }
     }
-    freeContext(node, env);
+    freeContext(node);
 }
 
-fn nodeReset(js: *napigen.JsContext, node: *anyopaque) void {
+fn nodeReset(node: *anyopaque) void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
-    freeContext(yg_node, js.env);
+    freeContext(yg_node);
     c.YGNodeReset(yg_node);
 }
 
@@ -505,6 +505,9 @@ fn nodeSetAlwaysFormsContainingBlock(node: *anyopaque, alwaysFormsContainingBloc
 
 /// Context struct stored on each node that has callbacks
 const CallbackContext = struct {
+    /// Stored env from when callbacks were set up - used ONLY for cleanup (napi_delete_reference)
+    /// Callbacks should use the thread-local current_env instead
+    setup_env: napigen.napi_env,
     measure_func: ?napigen.napi_ref = null,
     baseline_func: ?napigen.napi_ref = null,
     dirtied_func: ?napigen.napi_ref = null,
@@ -518,13 +521,13 @@ const callback_allocator = std.heap.c_allocator;
 threadlocal var current_env: ?napigen.napi_env = null;
 
 /// Get or create callback context for a node
-fn getOrCreateContext(node: c.YGNodeRef) *CallbackContext {
+fn getOrCreateContext(node: c.YGNodeRef, env: napigen.napi_env) *CallbackContext {
     const existing = c.YGNodeGetContext(node);
     if (existing) |ptr| {
         return @ptrCast(@alignCast(ptr));
     }
     const ctx = callback_allocator.create(CallbackContext) catch @panic("Failed to allocate callback context");
-    ctx.* = CallbackContext{};
+    ctx.* = CallbackContext{ .setup_env = env };
     c.YGNodeSetContext(node, ctx);
     return ctx;
 }
@@ -539,19 +542,19 @@ fn getContext(node: c.YGNodeConstRef) ?*CallbackContext {
 }
 
 /// Free callback context and release refs
-fn freeContext(node: c.YGNodeRef, env: napigen.napi_env) void {
+fn freeContext(node: c.YGNodeRef) void {
     const existing = c.YGNodeGetContext(node);
     if (existing) |ptr| {
         const ctx: *CallbackContext = @ptrCast(@alignCast(ptr));
-        // Release refs using current env (must be valid during this NAPI call)
+        // Release refs using setup_env (valid for cleanup operations)
         if (ctx.measure_func) |ref| {
-            _ = napigen.napi.napi_delete_reference(env, ref);
+            _ = napigen.napi.napi_delete_reference(ctx.setup_env, ref);
         }
         if (ctx.baseline_func) |ref| {
-            _ = napigen.napi.napi_delete_reference(env, ref);
+            _ = napigen.napi.napi_delete_reference(ctx.setup_env, ref);
         }
         if (ctx.dirtied_func) |ref| {
-            _ = napigen.napi.napi_delete_reference(env, ref);
+            _ = napigen.napi.napi_delete_reference(ctx.setup_env, ref);
         }
         callback_allocator.destroy(ctx);
         c.YGNodeSetContext(node, null);
@@ -674,7 +677,7 @@ fn internalDirtiedFunc(node: c.YGNodeConstRef) callconv(.c) void {
 /// Set measure function from JS
 fn nodeSetMeasureFunc(js: *napigen.JsContext, node: *anyopaque, func: napigen.napi_value) !void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
-    const ctx = getOrCreateContext(yg_node);
+    const ctx = getOrCreateContext(yg_node, js.env);
 
     // Delete old ref if exists
     if (ctx.measure_func) |old_ref| {
@@ -720,7 +723,7 @@ fn nodeHasMeasureFunc(node: *anyopaque) bool {
 /// Set baseline function from JS
 fn nodeSetBaselineFunc(js: *napigen.JsContext, node: *anyopaque, func: napigen.napi_value) !void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
-    const ctx = getOrCreateContext(yg_node);
+    const ctx = getOrCreateContext(yg_node, js.env);
 
     // Delete old ref if exists
     if (ctx.baseline_func) |old_ref| {
@@ -766,7 +769,7 @@ fn nodeHasBaselineFunc(node: *anyopaque) bool {
 /// Set dirtied function from JS
 fn nodeSetDirtiedFunc(js: *napigen.JsContext, node: *anyopaque, func: napigen.napi_value) !void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
-    const ctx = getOrCreateContext(yg_node);
+    const ctx = getOrCreateContext(yg_node, js.env);
 
     // Delete old ref if exists
     if (ctx.dirtied_func) |old_ref| {
