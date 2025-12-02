@@ -1,6 +1,6 @@
 {
   "name": "bun-yoga",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "FFI wrapper for Facebook's Yoga layout engine for Bun",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
