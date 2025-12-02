@@ -54,7 +54,39 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run Bun tests
+      - name: Run Bun tests (Unix)
+        if: runner.os != 'Windows'
+        run: bun test
+
+      - name: Find Windows debugger path
+        if: runner.os == 'Windows'
+        id: find-cdb
+        shell: powershell
+        run: |
+          # Look for cdb.exe in Windows SDK paths
+          $sdkPaths = @(
+            "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe",
+            "${env:ProgramFiles}\Windows Kits\10\Debuggers\x64\cdb.exe"
+          )
+          foreach ($path in $sdkPaths) {
+            if (Test-Path $path) {
+              Write-Host "Found cdb at: $path"
+              echo "cdb_path=$path" >> $env:GITHUB_OUTPUT
+              exit 0
+            }
+          }
+          Write-Host "cdb.exe not found, will run tests without debugger"
+          echo "cdb_path=" >> $env:GITHUB_OUTPUT
+
+      - name: Run Bun tests with debugger (Windows)
+        if: runner.os == 'Windows' && steps.find-cdb.outputs.cdb_path != ''
+        shell: cmd
+        run: |
+          @echo Running tests with cdb to capture stack trace on crash...
+          "${{ steps.find-cdb.outputs.cdb_path }}" -lines -o -G -c "~*kP; q" bun.exe test
+
+      - name: Run Bun tests (Windows fallback)
+        if: runner.os == 'Windows' && steps.find-cdb.outputs.cdb_path == ''
         run: bun test
 
       - name: Upload artifacts
