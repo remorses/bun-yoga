@@ -1,17 +1,5 @@
 # Changelog
 
-## 0.2.9
-
-### Fixes
-- Fixed callback functions (measure, baseline, dirtied) not being invoked during layout
-- The `current_env` thread-local was not being set during `calculateLayout` and `markDirty`
-- Callbacks now work correctly on macOS and Linux
-
-### Platform Support
-- Callbacks are disabled on Windows due to napigen/Bun NAPI compatibility issues
-- Tests that require callbacks are automatically skipped on Windows
-- All core layout functionality works on all platforms
-
 ## 0.2.8
 
 - Removed `getPlatform` helper function, inlined platform detection logic

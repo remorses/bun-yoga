@@ -55,11 +55,8 @@ describe("Node", () => {
   });
 });
 
-// Note: MeasureFunc tests are skipped on Windows due to napigen/Bun NAPI compatibility issues
-const callbacksSupported = process.platform !== "win32";
-
 describe("MeasureFunc", () => {
-  test.skipIf(!callbacksSupported)("setMeasureFunc and hasMeasureFunc", () => {
+  test("setMeasureFunc and hasMeasureFunc", () => {
     const node = Node.create();
 
     expect(node.hasMeasureFunc()).toBe(false);
@@ -76,7 +73,7 @@ describe("MeasureFunc", () => {
     node.free();
   });
 
-  test.skipIf(!callbacksSupported)("measure function is called during layout", () => {
+  test("measure function is called during layout", () => {
     const root = Node.create();
     root.setWidth(200);
     root.setHeight(200);
@@ -101,7 +98,7 @@ describe("MeasureFunc", () => {
     root.freeRecursive();
   });
 
-  test.skipIf(!callbacksSupported)("measure function receives correct modes", () => {
+  test("measure function receives correct modes", () => {
     const root = Node.create();
     root.setWidth(100);
     root.setFlexDirection(FlexDirection.Row);
@@ -132,7 +129,7 @@ describe("MeasureFunc", () => {
 });
 
 describe("DirtiedFunc", () => {
-  test.skipIf(!callbacksSupported)("setDirtiedFunc callback is called", () => {
+  test("setDirtiedFunc callback is called", () => {
     const root = Node.create();
     root.setWidth(100);
     root.setHeight(100);
@@ -223,7 +220,7 @@ describe("Margins, Padding, Border", () => {
 });
 
 describe("BaselineFunc", () => {
-  test.skipIf(!callbacksSupported)("setBaselineFunc callback affects layout", () => {
+  test("setBaselineFunc callback affects layout", () => {
     const root = Node.create();
     root.setWidth(200);
     root.setHeight(100);
@@ -543,7 +540,7 @@ describe("Value getters", () => {
 });
 
 describe("DirtiedFunction signature", () => {
-  test.skipIf(!callbacksSupported)("dirtiedFunc receives node as parameter", () => {
+  test("dirtiedFunc receives node as parameter", () => {
     const root = Node.create();
     root.setWidth(100);
     root.setHeight(100);
@@ -699,7 +696,7 @@ describe("Use-after-free protection", () => {
 });
 
 describe("Memory management", () => {
-  test.skipIf(!callbacksSupported)("freeRecursive cleans up callbacks without errors", () => {
+  test("freeRecursive cleans up callbacks without errors", () => {
     const root = Node.create();
     root.setWidth(200);
     root.setHeight(200);
@@ -724,7 +721,7 @@ describe("Memory management", () => {
     root.freeRecursive();
   });
 
-  test.skipIf(!callbacksSupported)("reset cleans up callbacks and allows new ones", () => {
+  test("reset cleans up callbacks and allows new ones", () => {
     const node = Node.create();
 
     // Set measure function (don't set width/height so measure func is called)
@@ -758,7 +755,7 @@ describe("Memory management", () => {
     node.free();
   });
 
-  test.skipIf(!callbacksSupported)("rapid free/create cycles with measure functions", () => {
+  test("rapid free/create cycles with measure functions", () => {
     // This test verifies that rapid free/create cycles don't cause
     // memory corruption (the original bug on Linux)
     const config = Config.create();
@@ -785,7 +782,7 @@ describe("Memory management", () => {
     config.free();
   });
 
-  test.skipIf(!callbacksSupported)("reset followed by free works correctly", () => {
+  test("reset followed by free works correctly", () => {
     const node = Node.create();
 
     node.setMeasureFunc(() => ({ width: 50, height: 50 }));
@@ -801,7 +798,7 @@ describe("Memory management", () => {
     node.free();
   });
 
-  test.skipIf(!callbacksSupported)("multiple reset calls are safe", () => {
+  test("multiple reset calls are safe", () => {
     const node = Node.create();
 
     node.setMeasureFunc(() => ({ width: 50, height: 50 }));
@@ -815,7 +812,7 @@ describe("Memory management", () => {
     node.free();
   });
 
-  test.skipIf(!callbacksSupported)("freeRecursive with nested children with callbacks", () => {
+  test("freeRecursive with nested children with callbacks", () => {
     const root = Node.create();
     root.setWidth(200);
     root.setHeight(200);
@@ -845,7 +842,7 @@ describe("Memory management", () => {
     root.freeRecursive();
   });
 
-  test.skipIf(!callbacksSupported)("interleaved node lifecycle with callbacks", () => {
+  test("interleaved node lifecycle with callbacks", () => {
     const config = Config.create();
     const nodes: Node[] = [];
 

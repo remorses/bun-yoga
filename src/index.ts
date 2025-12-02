@@ -911,13 +911,8 @@ export class Node {
   }
 
   // Callback functions
-  // Note: These are currently disabled on Windows due to a napigen/Bun NAPI compatibility issue
   setMeasureFunc(measureFunc: MeasureFunction | null): void {
     this.assertNotFreed();
-    if (!yg.nodeSetMeasureFunc) {
-      // Callbacks not supported on this platform
-      return;
-    }
     if (measureFunc) {
       yg.nodeSetMeasureFunc(this.ptr, measureFunc);
     } else {
@@ -927,19 +922,16 @@ export class Node {
 
   unsetMeasureFunc(): void {
     if (this._freed) return;
-    if (!yg.nodeUnsetMeasureFunc) return;
     yg.nodeUnsetMeasureFunc(this.ptr);
   }
 
   hasMeasureFunc(): boolean {
     this.assertNotFreed();
-    if (!yg.nodeHasMeasureFunc) return false;
     return yg.nodeHasMeasureFunc(this.ptr);
   }
 
   setBaselineFunc(baselineFunc: BaselineFunction | null): void {
     this.assertNotFreed();
-    if (!yg.nodeSetBaselineFunc) return;
     if (baselineFunc) {
       yg.nodeSetBaselineFunc(this.ptr, baselineFunc);
     } else {
@@ -949,19 +941,16 @@ export class Node {
 
   unsetBaselineFunc(): void {
     if (this._freed) return;
-    if (!yg.nodeUnsetBaselineFunc) return;
     yg.nodeUnsetBaselineFunc(this.ptr);
   }
 
   hasBaselineFunc(): boolean {
     this.assertNotFreed();
-    if (!yg.nodeHasBaselineFunc) return false;
     return yg.nodeHasBaselineFunc(this.ptr);
   }
 
   setDirtiedFunc(dirtiedFunc: DirtiedFunction | null): void {
     this.assertNotFreed();
-    if (!yg.nodeSetDirtiedFunc) return;
     if (dirtiedFunc) {
       // Wrap callback to pass this node instance
       const node = this;
@@ -973,13 +962,11 @@ export class Node {
 
   unsetDirtiedFunc(): void {
     if (this._freed) return;
-    if (!yg.nodeUnsetDirtiedFunc) return;
     yg.nodeUnsetDirtiedFunc(this.ptr);
   }
 
   hasDirtiedFunc(): boolean {
     this.assertNotFreed();
-    if (!yg.nodeHasDirtiedFunc) return false;
     return yg.nodeHasDirtiedFunc(this.ptr);
   }
 }

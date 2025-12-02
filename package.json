@@ -1,6 +1,6 @@
 {
   "name": "yoga-napi",
-  "version": "0.2.9",
+  "version": "0.2.8",
   "description": "NAPI wrapper for Facebook's Yoga layout engine",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

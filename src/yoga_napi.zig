@@ -1,9 +1,5 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const napigen = @import("napigen");
-
-// Callbacks are disabled on Windows due to napigen/Bun NAPI compatibility issues
-const callbacks_enabled = builtin.target.os.tag != .windows;
 
 // Import C headers from Yoga
 const c = @cImport({
@@ -133,16 +129,11 @@ fn nodeGetParent(node: *anyopaque) ?*anyopaque {
 // LAYOUT CALCULATION
 //=============================================================================
 
-// Version with js context - for platforms that support callbacks
-fn nodeCalculateLayoutWithCallbacks(js: *napigen.JsContext, node: *anyopaque, availableWidth: f32, availableHeight: f32, ownerDirection: u32) void {
-    // Set thread-local env for callbacks to use
+fn nodeCalculateLayout(js: *napigen.JsContext, node: *anyopaque, availableWidth: f32, availableHeight: f32, ownerDirection: u32) void {
+    // Set current env for callbacks during layout calculation
     current_env = js.env;
     defer current_env = null;
-    c.YGNodeCalculateLayout(@ptrCast(@alignCast(node)), availableWidth, availableHeight, ownerDirection);
-}
 
-// Version without js context - for Windows where callbacks are disabled
-fn nodeCalculateLayoutSimple(node: *anyopaque, availableWidth: f32, availableHeight: f32, ownerDirection: u32) void {
     c.YGNodeCalculateLayout(@ptrCast(@alignCast(node)), availableWidth, availableHeight, ownerDirection);
 }
 
@@ -158,16 +149,11 @@ fn nodeIsDirty(node: *anyopaque) bool {
     return c.YGNodeIsDirty(@ptrCast(@alignCast(node)));
 }
 
-// Version with js context - for platforms that support callbacks
-fn nodeMarkDirtyWithCallbacks(js: *napigen.JsContext, node: *anyopaque) void {
-    // Set thread-local env for dirtied callback
+fn nodeMarkDirty(js: *napigen.JsContext, node: *anyopaque) void {
+    // Set current env for dirtied callback
     current_env = js.env;
     defer current_env = null;
-    c.YGNodeMarkDirty(@ptrCast(@alignCast(node)));
-}
 
-// Version without js context - for Windows
-fn nodeMarkDirtySimple(node: *anyopaque) void {
     c.YGNodeMarkDirty(@ptrCast(@alignCast(node)));
 }
 
@@ -920,16 +906,11 @@ fn initModule(js: *napigen.JsContext, exports: napigen.napi_value) !napigen.napi
     try js.setNamedProperty(exports, "nodeGetChildCount", try js.createFunction(nodeGetChildCount));
     try js.setNamedProperty(exports, "nodeGetParent", try js.createFunction(nodeGetParent));
 
-    // Layout calculation - use callback-enabled versions on non-Windows
-    if (callbacks_enabled) {
-        try js.setNamedProperty(exports, "nodeCalculateLayout", try js.createFunction(nodeCalculateLayoutWithCallbacks));
-        try js.setNamedProperty(exports, "nodeMarkDirty", try js.createFunction(nodeMarkDirtyWithCallbacks));
-    } else {
-        try js.setNamedProperty(exports, "nodeCalculateLayout", try js.createFunction(nodeCalculateLayoutSimple));
-        try js.setNamedProperty(exports, "nodeMarkDirty", try js.createFunction(nodeMarkDirtySimple));
-    }
+    // Layout calculation
+    try js.setNamedProperty(exports, "nodeCalculateLayout", try js.createFunction(nodeCalculateLayout));
     try js.setNamedProperty(exports, "nodeGetHasNewLayout", try js.createFunction(nodeGetHasNewLayout));
     try js.setNamedProperty(exports, "nodeSetHasNewLayout", try js.createFunction(nodeSetHasNewLayout));
+    try js.setNamedProperty(exports, "nodeMarkDirty", try js.createFunction(nodeMarkDirty));
     try js.setNamedProperty(exports, "nodeIsDirty", try js.createFunction(nodeIsDirty));
 
     // Layout result access
@@ -1033,18 +1014,16 @@ fn initModule(js: *napigen.JsContext, exports: napigen.napi_value) !napigen.napi
     try js.setNamedProperty(exports, "nodeStyleGetGap", try js.createFunction(nodeStyleGetGap));
     try js.setNamedProperty(exports, "nodeStyleGetFlexBasis", try js.createFunction(nodeStyleGetFlexBasis));
 
-    // Callback functions - disabled on Windows due to napigen/Bun NAPI compatibility issues
-    if (callbacks_enabled) {
-        try js.setNamedProperty(exports, "nodeSetMeasureFunc", try js.createFunction(nodeSetMeasureFunc));
-        try js.setNamedProperty(exports, "nodeUnsetMeasureFunc", try js.createFunction(nodeUnsetMeasureFunc));
-        try js.setNamedProperty(exports, "nodeHasMeasureFunc", try js.createFunction(nodeHasMeasureFunc));
-        try js.setNamedProperty(exports, "nodeSetBaselineFunc", try js.createFunction(nodeSetBaselineFunc));
-        try js.setNamedProperty(exports, "nodeUnsetBaselineFunc", try js.createFunction(nodeUnsetBaselineFunc));
-        try js.setNamedProperty(exports, "nodeHasBaselineFunc", try js.createFunction(nodeHasBaselineFunc));
-        try js.setNamedProperty(exports, "nodeSetDirtiedFunc", try js.createFunction(nodeSetDirtiedFunc));
-        try js.setNamedProperty(exports, "nodeUnsetDirtiedFunc", try js.createFunction(nodeUnsetDirtiedFunc));
-        try js.setNamedProperty(exports, "nodeHasDirtiedFunc", try js.createFunction(nodeHasDirtiedFunc));
-    }
+    // Callback functions
+    try js.setNamedProperty(exports, "nodeSetMeasureFunc", try js.createFunction(nodeSetMeasureFunc));
+    try js.setNamedProperty(exports, "nodeUnsetMeasureFunc", try js.createFunction(nodeUnsetMeasureFunc));
+    try js.setNamedProperty(exports, "nodeHasMeasureFunc", try js.createFunction(nodeHasMeasureFunc));
+    try js.setNamedProperty(exports, "nodeSetBaselineFunc", try js.createFunction(nodeSetBaselineFunc));
+    try js.setNamedProperty(exports, "nodeUnsetBaselineFunc", try js.createFunction(nodeUnsetBaselineFunc));
+    try js.setNamedProperty(exports, "nodeHasBaselineFunc", try js.createFunction(nodeHasBaselineFunc));
+    try js.setNamedProperty(exports, "nodeSetDirtiedFunc", try js.createFunction(nodeSetDirtiedFunc));
+    try js.setNamedProperty(exports, "nodeUnsetDirtiedFunc", try js.createFunction(nodeUnsetDirtiedFunc));
+    try js.setNamedProperty(exports, "nodeHasDirtiedFunc", try js.createFunction(nodeHasDirtiedFunc));
 
     return exports;
 }
