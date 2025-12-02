@@ -74,24 +74,43 @@ fn nodeClone(node: *anyopaque) *anyopaque {
     return @ptrCast(c.YGNodeClone(@ptrCast(@alignCast(node))));
 }
 
-fn nodeFree(node: *anyopaque) void {
+fn nodeFree(js: *napigen.JsContext, node: *anyopaque) void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
-    // Note: We don't have access to env here, so we skip callback cleanup.
-    // This causes a small memory leak for nodes with callbacks, but avoids crashes.
-    // Users should call freeRecursive before freeing nodes with callbacks.
+    // Set current_env for cleanup operations
+    current_env = js.env;
+    defer current_env = null;
+    freeContext(yg_node);
     c.YGNodeFree(yg_node);
 }
 
-fn nodeFreeRecursive(node: *anyopaque) void {
+fn nodeFreeRecursive(js: *napigen.JsContext, node: *anyopaque) void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
-    // Note: We don't have access to env here, so we skip callback cleanup.
-    // This causes a small memory leak, but avoids crashes on Windows.
+    // Set current_env for cleanup operations
+    current_env = js.env;
+    defer current_env = null;
+    // Free contexts for all children recursively
+    freeContextRecursive(yg_node);
     c.YGNodeFreeRecursive(yg_node);
 }
 
-fn nodeReset(node: *anyopaque) void {
+fn freeContextRecursive(node: c.YGNodeRef) void {
+    const childCount = c.YGNodeGetChildCount(node);
+    var i: usize = 0;
+    while (i < childCount) : (i += 1) {
+        const child = c.YGNodeGetChild(node, i);
+        if (child) |ch| {
+            freeContextRecursive(ch);
+        }
+    }
+    freeContext(node);
+}
+
+fn nodeReset(js: *napigen.JsContext, node: *anyopaque) void {
     const yg_node: c.YGNodeRef = @ptrCast(@alignCast(node));
-    // Note: We don't have access to env here, so we skip callback cleanup.
+    // Set current_env for cleanup operations
+    current_env = js.env;
+    defer current_env = null;
+    freeContext(yg_node);
     c.YGNodeReset(yg_node);
 }
 
