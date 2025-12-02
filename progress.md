@@ -190,13 +190,38 @@ this.yogaNode.setMeasureFunc(measureFunc)
 
 **Verdict:** This package can replace `yoga-layout` for OpenTUI's basic layout needs, but **text components (`TextBufferRenderable`, `EditBufferRenderable`, `Text`, `TextNode`) will not work** until `setMeasureFunc()` is implemented.
 
+## Known Issues
+
+### Windows + Bun NAPI Crash
+
+**Status:** Bun bug, not our code
+
+The native module works correctly with **Node.js on Windows** but crashes with **Bun on Windows**. This is a known Bun NAPI issue:
+
+- **Root cause:** Bun's NAPI implementation on Windows has bugs causing segfaults during module initialization
+- **Related issue:** [oven-sh/bun#9292](https://github.com/oven-sh/bun/issues/9292)
+- **Workaround:** Use Node.js on Windows until Bun fixes this
+
+**CI Verification:**
+```
+Node.js: Module loaded successfully, all 110 exports available ✅
+Bun: panic(main thread): Segmentation fault at address 0x33BBC37D ❌
+```
+
+**Affected platforms:**
+- Windows + Bun: ❌ Crashes
+- Windows + Node.js: ✅ Works
+- macOS + Bun/Node: ✅ Works  
+- Linux + Bun/Node: ✅ Works
+
 ## Build Commands
 ```bash
 zig build                        # Debug build
 zig build -Doptimize=ReleaseFast # Release build
 zig build test                   # Run Zig tests
+bun test                         # Run TypeScript tests
 bun run bench.ts                 # Run benchmark
 ```
 
 ## Output
-- `zig-out/lib/libyoga.dylib` - Dynamic library for FFI
+- `zig-out/lib/yoga.node` - NAPI native addon

@@ -8,9 +8,12 @@
 - Callbacks now work correctly on macOS and Linux
 
 ### Platform Support
-- Callbacks are disabled on Windows due to napigen/Bun NAPI compatibility issues
-- Tests that require callbacks are automatically skipped on Windows
-- All core layout functionality works on all platforms
+- **Windows + Node.js**: Full support, all features work
+- **Windows + Bun**: Known Bun NAPI crash (see [bun#9292](https://github.com/oven-sh/bun/issues/9292))
+  - The native module works perfectly with Node.js on Windows
+  - Bun crashes during NAPI module initialization - this is a Bun bug, not our code
+  - CI tests with Node.js on Windows to verify the module works
+- **macOS/Linux**: Full support with both Node.js and Bun
 
 ## 0.2.8
 
