@@ -78,18 +78,9 @@ See `progress.md` for detailed progress and decisions.
 
 do `curl gitchamber.com` to read list, read, search github files
 
-## changelog
+## changesets
 
-after any meaningful change update (or create if missing ) CHANGELOG.md and add the changes made in a new version like 
-
-```md
-## 0.0.0
-
-- implemented something
-- done something
-```
-
-then bump the package.json version too.
+After completing a fix or feature, add a `.changeset/*.md` file at the repo root instead of editing CHANGELOG.md. Never edit CHANGELOG.md directly; it is generated at publish time. Never bump `package.json` version manually. Load the `changesets` skill for format and rules.
 
 ## Publishing
 
@@ -99,10 +90,9 @@ NEVER run `npm publish` locally. CI handles publishing automatically on push to 
 - Publishing locally with stale binaries breaks the package for users
 
 When you make a change:
-1. Bump the package.json version
-2. Update CHANGELOG.md
-3. Commit and push to main
-4. CI will build and publish automatically
+1. Add a `.changeset/*.md` file describing the changes (load `changesets` skill for format)
+2. Commit and push to main
+3. CI will build and publish automatically
 
 
 ## working on the library
